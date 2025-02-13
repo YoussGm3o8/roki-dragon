@@ -211,4 +211,14 @@ public class DatabaseManager {
             plugin.getLogger().log(LogLevel.CRITICAL, "Error removing dragon: ", e);
         }
     }
+
+    public void markEggAdminHatched(String eggId) {
+        String sql = "UPDATE dragon_eggs SET hatched = 1, onlineTime = -1 WHERE eggId = ?";
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            preparedStatement.setString(1, eggId);
+            preparedStatement.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(LogLevel.CRITICAL, "Error marking egg as admin-hatched: ", e);
+        }
+    }
 }

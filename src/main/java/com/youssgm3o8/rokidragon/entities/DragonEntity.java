@@ -4,10 +4,12 @@ import cn.nukkit.Player;
 import cn.nukkit.Server;
 import cn.nukkit.entity.Attribute;
 import cn.nukkit.entity.Entity;
+import cn.nukkit.entity.EntityInteractable;
 import cn.nukkit.entity.custom.CustomEntity;
 import cn.nukkit.entity.custom.EntityDefinition;
 import cn.nukkit.entity.data.FloatEntityData;
 import cn.nukkit.entity.data.Vector3fEntityData;
+import cn.nukkit.entity.item.EntityVehicle;
 import cn.nukkit.entity.mob.EntityEnderDragon;
 import cn.nukkit.event.entity.EntityDamageEvent;
 import cn.nukkit.level.format.FullChunk;
@@ -23,7 +25,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Objects;
 
-public class DragonEntity extends HorseBase implements CustomEntity {
+public class DragonEntity extends HorseBase implements CustomEntity, EntityInteractable {
     public static final String IDENTIFIER = "custom:dragon";
     public static final EntityDefinition DEFINITION =
             EntityDefinition.builder().identifier(DragonEntity.IDENTIFIER).implementation(DragonEntity.class).build();
@@ -34,29 +36,32 @@ public class DragonEntity extends HorseBase implements CustomEntity {
     private static final float PASSENGER_HEIGHT_OFFSET = 2.5f;
 
     private boolean isTeleporting = false; // Flag to track teleportation
-    private long dismountStart = 0; // Time when no passenger present
+    private long dismountStart = 0;
     private boolean shouldDespawn = false;
 
     protected ArrayList<Entity> passengers = new ArrayList<>();
     protected float moveSpeed = DEFAULT_MOVE_SPEED;
     private Player owner;
 
+    // New field for identifying the dragon
+    private String dragonId;
+
     public DragonEntity(FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
-        this.setMaxHealth(200);
-        this.setHealth(200);
-        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 200f));
+        this.setMaxHealth(100);
+        this.setHealth(100);
+        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 100f));
     }
 
     @Override
     public void initEntity() {
-        this.setMaxHealth(200);
+        this.setMaxHealth(100);
         super.initEntity();
-        this.setHealth(200);
+        this.setHealth(100);
 
         this.fireProof = true;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_FIRE_IMMUNE, true);
-        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 200f));
+        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 100f));
 
         // Ensure the entity has a saddle by default
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SADDLED, true);
@@ -93,7 +98,7 @@ public class DragonEntity extends HorseBase implements CustomEntity {
         pk.pitch = (float) this.pitch;
 
         pk.attributes = new cn.nukkit.entity.Attribute[]{
-                cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MAX_HEALTH).setMaxValue(200.0f).setValue(200.0f),
+                cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MAX_HEALTH).setMaxValue(100.0f).setValue(100.0f),
                 cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MOVEMENT_SPEED).setValue(moveSpeed)
         };
 
@@ -105,9 +110,13 @@ public class DragonEntity extends HorseBase implements CustomEntity {
 
     @Override
     public boolean mountEntity(Entity entity, byte mode) {
-        if (entity instanceof Player && entity.equals(owner)) {
-            // Reset the despawn timer when a passenger mounts
-            dismountStart = 0;
+        // If this dragon is an admin dragon allow any player to mount it
+        if (this.getDragonId() != null && this.getDragonId().startsWith("admin")) {
+            return super.mountEntity(entity, mode);
+        }
+        // Instead of using equals(), compare UUIDs to check for owner access.
+        if (entity instanceof Player && owner != null &&
+            ((Player) entity).getUniqueId().equals(owner.getUniqueId())) {
             Objects.requireNonNull(entity, "The target of the mounting entity can't be null");
 
             if (entity.riding != null) {
@@ -168,6 +177,11 @@ public class DragonEntity extends HorseBase implements CustomEntity {
             Player player = (Player) entity;
             Vector3 currentPosition = this.getPosition();  // Get the current position of the entity
             player.teleport(currentPosition);  // Teleport the player to the DragonEntity position
+            
+            // Apply resistance effect (ID 11) for 5 seconds with amplifier 254 (for resistance 255)
+            player.addEffect(cn.nukkit.potion.Effect.getEffect(cn.nukkit.potion.Effect.RESISTANCE)
+                .setDuration(5 * 20) // 5 seconds in ticks
+                .setAmplifier(254));
         }
 
         this.dismountStart = System.currentTimeMillis();
@@ -181,18 +195,29 @@ public class DragonEntity extends HorseBase implements CustomEntity {
     public boolean onUpdate(int currentTick) {
         Iterator<Entity> linkedIterator = this.passengers.iterator();
   
-        while(linkedIterator.hasNext()) {
-           Entity linked = (Entity)linkedIterator.next();
-           if (!linked.isAlive()) {
-              if (linked.riding == this) {
-                 linked.riding = null;
-              }
-  
-              linkedIterator.remove();
-           }
+        while (linkedIterator.hasNext()) {
+            Entity linked = (Entity) linkedIterator.next();
+            if (!linked.isAlive()) {
+                if (linked.riding == this) {
+                    linked.riding = null;
+                }
+                linkedIterator.remove();
+            }
         }
-        this.move(this.motionX, 0, this.motionZ);
-        this.updateMovement();
+
+        // Only move if there are passengers
+        if (!this.passengers.isEmpty()) {
+            this.setImmobile(false);
+            this.move(this.motionX, 0, this.motionZ);
+            this.updateMovement();
+        } else {
+            // Stop any motion if there are no passengers
+            this.setImmobile(true);
+            this.motionX = 0;
+            this.motionY = 0;
+            this.motionZ = 0;
+        }
+
         if (this.passengers.isEmpty() && shouldDespawn) {
             long elapsed = System.currentTimeMillis() - dismountStart;
             if (elapsed >= 5 * 60_000) {
@@ -200,22 +225,10 @@ public class DragonEntity extends HorseBase implements CustomEntity {
                 return false;
             }
         }
-        // Check for despawn if no passengers:
-        if (passengers.isEmpty()) {
-            if (dismountStart == 0) {
-                dismountStart = System.currentTimeMillis(); // Start timer if not set
-            } else if (System.currentTimeMillis() - dismountStart >= 300_000) { // 5 minutes
-                this.close();
-                return false;
-            }
-        } else {
-            // Reset timer when a passenger is present
-            dismountStart = 0;
-        }
         return super.onUpdate(currentTick);
-     }
+    }
 
-    private static final float MAX_SPEED = 1f; // Set a maximum speed for the dragon
+    private static final float MAX_SPEED = 0.92f; // Set a maximum speed for the dragon
     @Override
     public void onPlayerInput(Player player, double strafe, double forward) {
         this.stayTime = 0;
@@ -318,7 +331,7 @@ public class DragonEntity extends HorseBase implements CustomEntity {
         addEntity.y = (float) this.y + this.getBaseOffset();
         addEntity.speedZ = (float) this.motionZ;
         addEntity.metadata = this.dataProperties.clone();
-        addEntity.attributes = new Attribute[]{Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(200).setValue(200)};
+        addEntity.attributes = new Attribute[]{Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(100).setValue(100)};
 
         addEntity.links = new EntityLink[this.passengers.size()];
 
@@ -331,17 +344,17 @@ public class DragonEntity extends HorseBase implements CustomEntity {
 
     @Override
     public float getWidth() {
-        return 3.0f; // Increased from default
+        return 4.0f; // Increased from default
     }
 
     @Override
     public float getHeight() {
-        return 3.0f; // Increased from default
+        return 4.0f; // Increased from default
     }
 
     @Override
     public float getLength() {
-        return 4.0f; // Added length parameter
+        return 6.0f; // Added length parameter
     }
    
     @Override
@@ -357,7 +370,7 @@ public class DragonEntity extends HorseBase implements CustomEntity {
         return super.attack(source);
     }
 
-    private void dismountAllPassengers() {
+    public void dismountAllPassengers() {
         for (Entity passenger : new ArrayList<>(this.passengers)) {
             dismountEntity(passenger);
         }
@@ -397,4 +410,29 @@ public class DragonEntity extends HorseBase implements CustomEntity {
     public void setOwner(Player owner) {
         this.owner = owner;
     }
+
+    public Player getOwner() {
+        return this.owner;
+    }
+
+    // Getter for dragonId
+    public String getDragonId() {
+        return this.dragonId;
+    }
+
+    public void setDragonId(String dragonId) {
+        this.dragonId = dragonId;
+    }
+
+    @Override
+    public String getInteractButtonText() {
+        return "action.interact.mount";
+    }
+
+    @Override
+    public boolean canDoInteraction() {
+        return passengers.isEmpty();
+    }
+
+
 }

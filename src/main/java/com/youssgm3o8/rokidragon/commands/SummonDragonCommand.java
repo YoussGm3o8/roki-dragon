@@ -22,10 +22,20 @@ public class SummonDragonCommand extends Command {
         }
 
         Player player = (Player) sender;
-        if (args.length > 0 && args[0].equalsIgnoreCase("buy")) {
-            return plugin.handleBuyDragonCommand(player);
-        } else {
-            return plugin.handleSummonDragonCommand(player);
+        if (args.length > 0) {
+            if (args[0].equalsIgnoreCase("buy")) {
+                return plugin.handleBuyDragonCommand(player);
+            } else if (args[0].equalsIgnoreCase("lost")) {
+                return plugin.handleLostEggCommand(player);
+            } else if (args[0].equalsIgnoreCase("admin")) {
+                if (args.length < 2) {
+                    player.sendMessage("§cUsage: /summondragon admin <player>");
+                    return true;
+                }
+                String targetName = args[1];
+                return plugin.handleAdminHatchEggCommand(player, targetName);
+            }
         }
+        return plugin.handleSummonDragonCommand(player);
     }
 }
