@@ -17,7 +17,7 @@ RokiDragonPlugin is a Nukkit plugin that introduces a custom dragon entity to yo
 3. Start your server to generate the default configuration files.
 4. Configure the plugin by editing the `config.yml` file located in the `plugins/RokiDragon` folder.
 
-## dependency
+## Dependencies
 
 You need to have EconomyAPI and MobPlugin on your server for this plugin to work.
 1. MobPlugin: https://cloudburstmc.org/resources/mobplugin.3/
