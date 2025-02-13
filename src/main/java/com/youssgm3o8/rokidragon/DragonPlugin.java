@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import cn.nukkit.command.Command;
+import cn.nukkit.command.CommandSender;
 
 public class DragonPlugin extends PluginBase implements Listener {
     private DragonEggManager eggManager;
@@ -147,6 +149,34 @@ public class DragonPlugin extends PluginBase implements Listener {
                 }
             }
         }
+    }
+    
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("summondragon")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("This command can only be used by players.");
+                return true;
+            }
+
+            Player player = (Player) sender;
+            if (args.length > 0) {
+                if (args[0].equalsIgnoreCase("buy")) {
+                    return handleBuyDragonCommand(player);
+                } else if (args[0].equalsIgnoreCase("lost")) {
+                    return handleLostEggCommand(player);
+                } else if (args[0].equalsIgnoreCase("admin")) {
+                    if (args.length < 2) {
+                        player.sendMessage("§cUsage: /summondragon admin <player>");
+                        return true;
+                    }
+                    String targetName = args[1];
+                    return handleAdminHatchEggCommand(player, targetName);
+                }
+            }
+            return handleSummonDragonCommand(player);
+        }
+        return false;
     }
 
     private void loadConfig() {
