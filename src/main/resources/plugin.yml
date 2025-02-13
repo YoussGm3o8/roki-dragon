@@ -1,0 +1,5 @@
+name: RokiDragon
+main: com.youssgm3o8.rokidragon.DragonPlugin
+version: 1.0.0
+api: ["1.1.0"]
+load: STARTUP

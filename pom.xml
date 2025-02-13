@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.youssgm3o8</groupId>
+    <artifactId>rokidragon</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>RokiDragonPlugin</name>
+    <description>Nukkit plugin for adding a custom dragon entity and related features</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>opencollab-repository-maven-releases</id>
+            <name>Opencollab Repository</name>
+            <url>https://repo.opencollab.dev/maven-releases</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>cn.nukkit</groupId>
+            <artifactId>nukkit</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>me.onebone</groupId>
+            <artifactId>economyapi</artifactId>
+            <version>2.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.Nukkit-coders</groupId>
+            <artifactId>MobPlugin</artifactId>
+            <version>7cfa6833d0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.43.0.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <minimizeJar>true</minimizeJar>
+                            <filters>
+                                <filter>
+                                    <excludeDefaults>false</excludeDefaults>
+                                    <artifact>*:*</artifact>
+                                    <includes>
+                                        <include>org/glassfish/json/JsonProviderImpl</include>
+                                        <include>com/sun/xml/bind/v2/model/nav/ReflectionNavigator</include>
+                                    </includes>
+                                    <excludes>
+                                        <exclude>**/*.md</exclude>
+                                        <exclude>**/*.markdown</exclude>
+                                        <exclude>**/*.header</exclude>
+                                        <exclude>**/*.xml</exclude>
+                                        <exclude>**/pom.properties</exclude>
+                                        <exclude>**/io.netty.versions.properties</exclude>
+                                        <exclude>**/*.args</exclude>
+                                        <exclude>**/*.so</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.youssgm3o8.rokidragon.DragonPlugin</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

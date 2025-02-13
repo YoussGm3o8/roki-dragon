@@ -1,0 +1,3 @@
+dragon-egg-price: 128000
+dragon-hatching-time: 3600 # Hatching time in seconds (default: 1 hour)
+dragon-buy-cooldown: 60 # Cooldown in seconds between purchases (default: 60 seconds)
