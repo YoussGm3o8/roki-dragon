@@ -1,6 +1,6 @@
 # RokiDragonPlugin
 
-RokiDragonPlugin is a Nukkit plugin that introduces a custom dragon entity to your Minecraft server. Players can purchase, hatch, and summon their own dragons. The plugin also includes features for managing dragon eggs and ensuring that only the rightful owner can use them.
+RokiDragonPlugin is a Nukkit plugin that introduces a rideable dragon entity to your Minecraft server. Players can purchase, hatch, and summon their own dragons. The plugin also includes features for managing dragon eggs and ensuring that only the rightful owner can use them.
 
 ## Features
 
