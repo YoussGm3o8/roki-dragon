@@ -68,7 +68,9 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <minimizeJar>true</minimizeJar>
+                            <!-- Disable jar minimization to keep SQLite classes. -->
+                            <!-- <minimizeJar>true</minimizeJar> -->
+                            <keepDependenciesWithProvidedScope>true</keepDependenciesWithProvidedScope>
                             <filters>
                                 <filter>
                                     <excludeDefaults>false</excludeDefaults>
