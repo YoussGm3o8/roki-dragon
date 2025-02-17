@@ -2,6 +2,7 @@ package com.youssgm3o8.rokidragon.entities;
 
 import cn.nukkit.Player;
 import cn.nukkit.Server;
+import cn.nukkit.block.BlockID;
 import cn.nukkit.entity.Attribute;
 import cn.nukkit.entity.Entity;
 import cn.nukkit.entity.EntityInteractable;
@@ -12,18 +13,27 @@ import cn.nukkit.entity.data.Vector3fEntityData;
 import cn.nukkit.entity.item.EntityVehicle;
 import cn.nukkit.entity.mob.EntityEnderDragon;
 import cn.nukkit.event.entity.EntityDamageEvent;
+import cn.nukkit.item.Item;
+import cn.nukkit.item.ItemFireCharge;
 import cn.nukkit.level.format.FullChunk;
 import cn.nukkit.math.Vector3;
 import cn.nukkit.math.Vector3f;
 import cn.nukkit.nbt.tag.CompoundTag;
+import cn.nukkit.nbt.tag.DoubleTag;
+import cn.nukkit.nbt.tag.ListTag;
 import cn.nukkit.network.protocol.AddEntityPacket;
 import cn.nukkit.network.protocol.DataPacket;
+import cn.nukkit.network.protocol.LevelSoundEventPacket;
 import cn.nukkit.network.protocol.SetEntityLinkPacket;
 import cn.nukkit.network.protocol.types.EntityLink;
+import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
 import nukkitcoders.mobplugin.entities.HorseBase;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Objects;
+
+import com.youssgm3o8.rokidragon.DragonPlugin;
+import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
 
 public class DragonEntity extends HorseBase implements CustomEntity, EntityInteractable {
     public static final String IDENTIFIER = "custom:dragon";
@@ -34,6 +44,10 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private static final float VERTICAL_MOTION_UP = 0.2f;
     private static final float VERTICAL_MOTION_DOWN = -0.2f;
     private static final float PASSENGER_HEIGHT_OFFSET = 2.5f;
+    private static final float FIREBALL_SPEED = 2f;  // Increased from 1.5f
+    private static final float FIREBALL_OFFSET = 8.0f;
+    private static final long FIREBALL_COOLDOWN = 500; // cooldown in milliseconds
+    private long lastFireballTime = 0;
 
     private boolean isTeleporting = false; // Flag to track teleportation
     private long dismountStart = 0;
@@ -434,5 +448,114 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         return passengers.isEmpty();
     }
 
+    public void shootFireball(Player rider) {
+        long now = System.currentTimeMillis();
+        if (now - lastFireballTime < FIREBALL_COOLDOWN) {
+            return;
+        }
+        lastFireballTime = now;
+        
+        // Save original XP values using correct methods
+        final int originalExperience = rider.getExperience();
+        final int originalXpLevel = rider.getExperienceLevel();
+        // Override XP bar to start empty
+        rider.setExperience(0, originalXpLevel);
+        
+        // Schedule repeating task for XP update
+        final int[] ticks = {0};
+        final int intervalTicks = 10;
+        final cn.nukkit.scheduler.TaskHandler[] taskHandler = new cn.nukkit.scheduler.TaskHandler[1];
+        taskHandler[0] = DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(
+            DragonPlugin.getInstance(),
+            new Runnable() {
+                @Override
+                public void run() {
+                    ticks[0]++;
+                    float progress = (float) ticks[0] / intervalTicks;
+                    if (progress > 1f) {
+                        progress = 1f;
+                    }
+                    // Update XP progress simulation using calculated progress
+                    rider.setExperience((int) (originalExperience * progress), originalXpLevel);
+                    if (ticks[0] >= intervalTicks) {
+                        // Restore original XP values
+                        rider.setExperience(originalExperience, originalXpLevel);
+                        taskHandler[0].cancel();
+                    }
+                }
+            },
+            1
+        );
+        
+        // Compute the forward vector using yaw and pitch
+        double yawRad = Math.toRadians(this.yaw + 180);
+        double pitchRad = Math.toRadians(this.pitch);
+        double motX = -Math.sin(yawRad) * Math.cos(pitchRad);
+        double motY = -Math.sin(pitchRad);
+        double motZ = Math.cos(yawRad) * Math.cos(pitchRad);
+        
+        // Spawn position in front of the dragon's head
+        Vector3 pos = new Vector3(
+            this.x + (-Math.sin(yawRad) * FIREBALL_OFFSET),
+            this.y + 1.5,
+            this.z + (Math.cos(yawRad) * FIREBALL_OFFSET)
+        );
+        
+        CompoundTag fireballNBT = Entity.getDefaultNBT(pos)
+            .putList(new ListTag<DoubleTag>("Motion")
+                .add(new DoubleTag("", motX * FIREBALL_SPEED))
+                .add(new DoubleTag("", motY * FIREBALL_SPEED))
+                .add(new DoubleTag("", motZ * FIREBALL_SPEED)))
+            .putList(new ListTag<DoubleTag>("Pos")
+                .add(new DoubleTag("", pos.x))
+                .add(new DoubleTag("", pos.y))
+                .add(new DoubleTag("", pos.z)))
+            .putLong("DragonID", this.getId());
+        
+        EntityBedFireBall fireball = new EntityBedFireBall(this.getChunk(), fireballNBT, this);
+        fireball.setExplode(true);
+        fireball.setMotion(new Vector3(motX * FIREBALL_SPEED, motY * FIREBALL_SPEED, motZ * FIREBALL_SPEED));
+        fireball.spawnToAll();
+        
+        // Remove delayed task that spawns fire
+        
+        // Play sound effects
+        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_ENDER_DRAGON);
+        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_GHAST);
+    }
 
+    @Override
+    public boolean canCollideWith(Entity entity) {
+        // Don't collide with fireballs shot by this dragon
+        if (entity instanceof EntityGhastFireBall) {
+            CompoundTag nbt = entity.namedTag;
+            if (nbt != null && nbt.contains("DragonID") && nbt.getLong("DragonID") == this.getId()) {
+                return false;
+            }
+        }
+        return super.canCollideWith(entity);
+    }
+
+    private boolean consumeFireCharge(Player player) {
+        int fireChargeSlot = -1;
+        
+        // Find fire charge in player's inventory
+        for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
+            if (player.getInventory().getItem(slot) instanceof ItemFireCharge) {
+                fireChargeSlot = slot;
+                break;
+            }
+        }
+
+        if (fireChargeSlot == -1) {
+            return false;
+        }
+
+        // Remove one fire charge from the stack
+        Item fireCharge = player.getInventory().getItem(fireChargeSlot);
+        fireCharge.setCount(fireCharge.getCount() - 1);
+        player.getInventory().setItem(fireChargeSlot, fireCharge);
+        
+        return true;
+    }
 }

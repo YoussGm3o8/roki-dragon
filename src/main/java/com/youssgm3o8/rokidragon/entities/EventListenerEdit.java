@@ -17,6 +17,9 @@ import com.youssgm3o8.rokidragon.DragonPlugin;
 import java.util.HashMap;
 import java.util.UUID;
 import cn.nukkit.event.player.PlayerQuitEvent;
+import cn.nukkit.item.ItemFireCharge;
+import cn.nukkit.math.Vector3;
+import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
 
 public class EventListenerEdit extends EventListener {
 
@@ -54,6 +57,18 @@ public class EventListenerEdit extends EventListener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_AIR && 
+            event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) return;
+        
+        Player player = event.getPlayer();
+        if (player.riding instanceof DragonEntity) {
+            if (event.getItem() instanceof ItemFireCharge) {
+                event.setCancelled(true);
+                DragonEntity dragon = (DragonEntity) player.riding;
+                dragon.shootFireball(player);
+            }
+        }
+
         if (event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) return;
         if (event.getItem() == null) return;
         
@@ -76,7 +91,6 @@ public class EventListenerEdit extends EventListener {
             Item item = event.getItem();
             String itemEggId = item.getNamedTag().getString("eggId");
             String storedEggId = DragonPlugin.getInstance().getDatabaseManager().getDragonEggId(event.getPlayer().getUniqueId().toString());
-            Player player = event.getPlayer();
             if (storedEggId != null && storedEggId.equals(itemEggId)) {
                 // If the dragon is already spawned (record exists), despawn; otherwise, summon.
                 if (DragonPlugin.getInstance().getDatabaseManager().playerHasDragon(player.getUniqueId().toString())) {
