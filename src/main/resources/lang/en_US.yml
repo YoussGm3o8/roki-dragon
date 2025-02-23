@@ -1,0 +1,32 @@
+gui:
+  mainMenu:
+    title: "Dragon Management"
+    buttons:
+      customize: "Dragon Customization"
+      customize.lore:
+        - "Change your dragon's appearance"
+        - "and special effects"
+      storage: "Dragon Egg Storage"
+      storage.lore:
+        - "Store and manage your"
+        - "dragon eggs safely"
+  customization:
+    title: "Dragon Customization"
+    buttons:
+      type:
+        fire: "Fire Dragon"
+        ice: "Ice Dragon"
+        lightning: "Lightning Dragon"
+      effects:
+        flame: "Flame Trail"
+        ice: "Ice Trail"
+        lightning: "Lightning Trail"
+      color:
+        red: "Red Dragon"
+        blue: "Blue Dragon"
+        yellow: "Yellow Dragon"
+  storage:
+    title: "Dragon Egg Storage"
+    messages:
+      saved: "Dragon egg storage saved!"
+      loaded: "Dragon egg storage loaded!" 

@@ -13,6 +13,7 @@ import cn.nukkit.entity.data.Vector3fEntityData;
 import cn.nukkit.entity.item.EntityVehicle;
 import cn.nukkit.entity.mob.EntityEnderDragon;
 import cn.nukkit.event.entity.EntityDamageEvent;
+import cn.nukkit.event.entity.EntityDamageByEntityEvent;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemFireCharge;
 import cn.nukkit.level.format.FullChunk;
@@ -20,6 +21,7 @@ import cn.nukkit.math.Vector3;
 import cn.nukkit.math.Vector3f;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.nbt.tag.DoubleTag;
+import cn.nukkit.nbt.tag.FloatTag;
 import cn.nukkit.nbt.tag.ListTag;
 import cn.nukkit.network.protocol.AddEntityPacket;
 import cn.nukkit.network.protocol.DataPacket;
@@ -27,17 +29,26 @@ import cn.nukkit.network.protocol.LevelSoundEventPacket;
 import cn.nukkit.network.protocol.SetEntityLinkPacket;
 import cn.nukkit.network.protocol.types.EntityLink;
 import cn.nukkit.scheduler.TaskHandler;
-import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
+import cn.nukkit.utils.TextFormat;
 import nukkitcoders.mobplugin.entities.HorseBase;
+import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
+import cn.nukkit.level.particle.FlameParticle;
+import cn.nukkit.level.particle.SmokeParticle;
+import cn.nukkit.level.particle.BubbleParticle;
+import cn.nukkit.level.particle.RedstoneParticle;
+import cn.nukkit.level.ParticleEffect;
+import cn.nukkit.level.particle.ElectricSparkParticle;
+
+import com.youssgm3o8.rokidragon.DragonPlugin;
+import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
+import com.youssgm3o8.rokidragon.items.DragonShardManager;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.Map;
-
-import com.youssgm3o8.rokidragon.DragonPlugin;
-import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
 
 public class DragonEntity extends HorseBase implements CustomEntity, EntityInteractable {
     public static final String IDENTIFIER = "custom:dragon";
@@ -66,6 +77,22 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private final Map<UUID, Integer> originalExperience = new HashMap<>();
     private final Map<UUID, Integer> originalXpLevel = new HashMap<>();
 
+    private String dragonType = "Fire Dragon";
+    private String particleEffect = "Flame Trail";
+    private String dragonColor = "Red";
+
+    private DragonShardManager shardManager;
+
+    private static int DEFAULT_MAX_HEALTH = 100;
+    private static double DEFAULT_BASE_DAMAGE = 15.0;
+    private static double DEFAULT_DAMAGE_REDUCTION = 0.25;
+
+    public static void setDefaultStats(int maxHealth, double baseDamage, double damageReduction) {
+        DEFAULT_MAX_HEALTH = maxHealth;
+        DEFAULT_BASE_DAMAGE = baseDamage;
+        DEFAULT_DAMAGE_REDUCTION = damageReduction;
+    }
+
     public DragonEntity(FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
         this.setMaxHealth(100);
@@ -75,13 +102,13 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
     @Override
     public void initEntity() {
-        this.setMaxHealth(100);
+        this.setMaxHealth(DEFAULT_MAX_HEALTH);
         super.initEntity();
-        this.setHealth(100);
+        this.setHealth((float)DEFAULT_MAX_HEALTH);
 
         this.fireProof = true;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_FIRE_IMMUNE, true);
-        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 100f));
+        this.setDataProperty(new FloatEntityData(DATA_HEALTH, (float)DEFAULT_MAX_HEALTH));
 
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SADDLED, true);
 
@@ -89,6 +116,20 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.setDataProperty(new FloatEntityData(DATA_BOUNDING_BOX_HEIGHT, this.getHeight()));
         
         this.setSaddled(true);
+
+        // Load customization from NBT if exists
+        if (this.namedTag.contains("DragonType")) {
+            this.dragonType = this.namedTag.getString("DragonType");
+        }
+        if (this.namedTag.contains("ParticleEffect")) {
+            this.particleEffect = this.namedTag.getString("ParticleEffect");
+        }
+        if (this.namedTag.contains("DragonColor")) {
+            this.dragonColor = this.namedTag.getString("DragonColor");
+        }
+
+        // Make dragon damageable
+        this.setDataFlag(DATA_FLAGS, DATA_FLAG_NO_AI, false);
     }
 
     @Override
@@ -123,6 +164,9 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
         pk.metadata = this.dataProperties;
         player.dataPacket(pk);
+
+        // Apply visual customizations
+        applyCustomizations();
 
         super.spawnTo(player);
     }
@@ -254,7 +298,15 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
                 return false;
             }
         }
-        return super.onUpdate(currentTick);
+
+        if (super.onUpdate(currentTick)) {
+            // Apply particle effects every few ticks
+            if (currentTick % 5 == 0) {
+                applyCustomizations();
+            }
+            return true;
+        }
+        return false;
     }
 
     private static final float MAX_SPEED = 0.92f;
@@ -376,22 +428,116 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
     @Override
     public boolean attack(EntityDamageEvent source) {
-        if (source.getDamage() >= this.getHealth()) {
-            dismountAllPassengers();
+        if (source.getCause() == EntityDamageEvent.DamageCause.VOID) {
+            // Always allow void damage
+            return super.attack(source);
         }
-        return super.attack(source);
+
+        // Prevent damage from owner
+        if (source instanceof EntityDamageByEntityEvent) {
+            Entity damager = ((EntityDamageByEntityEvent) source).getDamager();
+            if (damager instanceof Player && damager.equals(this.owner)) {
+                return false;
+            }
+        }
+
+        // Apply damage reduction based on dragon type
+        float damage = source.getDamage();
+        switch (this.dragonType) {
+            case "Fire Dragon":
+                if (source.getCause() == EntityDamageEvent.DamageCause.FIRE || 
+                    source.getCause() == EntityDamageEvent.DamageCause.FIRE_TICK || 
+                    source.getCause() == EntityDamageEvent.DamageCause.LAVA) {
+                    return false; // Immune to fire damage
+                }
+                damage *= (1.0 - DEFAULT_DAMAGE_REDUCTION);
+                break;
+            case "Ice Dragon":
+                if (source.getCause() == EntityDamageEvent.DamageCause.DROWNING) {
+                    return false; // Immune to drowning
+                }
+                if (source.getCause() == EntityDamageEvent.DamageCause.FIRE || 
+                    source.getCause() == EntityDamageEvent.DamageCause.FIRE_TICK || 
+                    source.getCause() == EntityDamageEvent.DamageCause.LAVA) {
+                    damage *= 1.5f; // Takes more damage from fire
+                } else {
+                    damage *= (1.0 - DEFAULT_DAMAGE_REDUCTION);
+                }
+                break;
+            case "Lightning Dragon":
+                if (source.getCause() == EntityDamageEvent.DamageCause.LIGHTNING) {
+                    return false; // Immune to lightning
+                }
+                damage *= (1.0 - DEFAULT_DAMAGE_REDUCTION);
+                break;
+        }
+
+        source.setDamage(damage);
+        boolean result = super.attack(source);
+
+        // Update health display
+        if (result) {
+            this.setDataProperty(new FloatEntityData(DATA_HEALTH, (float) this.getHealth()));
+            
+            // Check if dragon died from this damage
+            if (this.getHealth() <= 0) {
+                handleDeath();
+            }
+        }
+
+        return result;
+    }
+
+    private void handleDeath() {
+        // Dismount all passengers
+        dismountAllPassengers();
+
+        // Restore XP for all passengers
+        for (Entity passenger : new ArrayList<>(this.passengers)) {
+            if (passenger instanceof Player) {
+                restorePlayerXP((Player) passenger);
+            }
+        }
+
+        // Notify owner and start cooldown
+        if (owner != null) {
+            DragonPlugin.getInstance().onDragonDeath(owner);
+        }
+
+        // Drop items or create effects
+        if (this.level != null) {
+            // Add death particles
+            for (int i = 0; i < 20; i++) {
+                this.level.addParticle(new cn.nukkit.level.particle.ExplodeParticle(this.add(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2,
+                    Math.random() * 2 - 1
+                )));
+            }
+
+            // Play death sound
+            this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_EXPLODE);
+        }
+
+        // Remove from database
+        if (owner != null) {
+            DragonPlugin.getInstance().getDatabaseManager().removeDragon(owner.getUniqueId().toString());
+        }
+
+        // Finally, close the entity
+        this.close();
+    }
+
+    @Override
+    public void kill() {
+        handleDeath();
+        super.kill();
     }
 
     public void dismountAllPassengers() {
         for (Entity passenger : new ArrayList<>(this.passengers)) {
             dismountEntity(passenger);
         }
-    }
-
-    @Override
-    public void kill() {
-        dismountAllPassengers();
-        super.kill();
     }
 
     @Override
@@ -445,136 +591,24 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         return passengers.isEmpty();
     }
 
-    public void shootFireball(Player rider) {
-        int cooldown = DragonPlugin.getInstance().getConfig().getInt("dragon-fireball-cooldown", 500);
-        long now = System.currentTimeMillis();
-        if (now - lastFireballTime < cooldown) {
+    public void shoot() {
+        if (System.currentTimeMillis() - lastFireballTime < DragonPlugin.getInstance().getConfig().getInt("dragon-fireball-cooldown", 500)) {
             return;
         }
+        lastFireballTime = System.currentTimeMillis();
 
-        // Check and consume fire charge first
-        if (!consumeFireCharge(rider)) {
-            rider.sendMessage("§cYou need a fire charge to shoot fireballs!");
-            return;
+        String dragonType = DragonPlugin.getInstance().getDatabaseManager().getDragonType(this.dragonId);
+        switch (dragonType) {
+            case "Fire Dragon":
+                shootFireball();
+                break;
+            case "Ice Dragon":
+                shootIceball();
+                break;
+            case "Lightning Dragon":
+                shootLightningBall();
+                break;
         }
-        
-        lastFireballTime = now;
-        
-        // Store original XP values before setting to 0
-        UUID uuid = rider.getUniqueId();
-        if (!originalExperience.containsKey(uuid)) {
-            originalExperience.put(uuid, rider.getExperience());
-            originalXpLevel.put(uuid, rider.getExperienceLevel());
-        }
-        
-        // Force XP bar to 0 and keep level
-        int currentLevel = rider.getExperienceLevel();
-        rider.setExperience(0, currentLevel); // Set both total XP and level
-        rider.sendExperience(0); // Force client-side update
-        
-        // Schedule repeating task for smooth XP regeneration
-        final int totalTicks = cooldown / 50; // Convert ms to ticks
-        final int xpPerTick = 1000 / totalTicks; // Divide total XP by number of ticks
-        final int[] currentTick = {0};
-        
-        // Store TaskHandler instead of int
-        final TaskHandler[] task = {null};
-        if (task[0] != null) {
-            task[0].cancel(); // Cancel any existing task
-        }
-        task[0] = DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(DragonPlugin.getInstance(), () -> {
-            if (!rider.isOnline() || rider.riding != this) {
-                task[0].cancel();
-                return;
-            }
-            currentTick[0]++;
-            int newXp = Math.min(1000, currentTick[0] * xpPerTick);
-            rider.setExperience(newXp, currentLevel);
-            rider.sendExperience(newXp);
-            
-            if (currentTick[0] >= totalTicks) {
-                rider.setExperience(1000, currentLevel);
-                rider.sendExperience(1000);
-                task[0].cancel();
-                return;
-            }
-        }, 1);
-        
-        // Compute the forward vector using yaw and pitch
-        double yawRad = Math.toRadians(this.yaw + 180);
-        double pitchRad = Math.toRadians(this.pitch);
-        double motX = -Math.sin(yawRad) * Math.cos(pitchRad);
-        double motY = -Math.sin(pitchRad);
-        double motZ = Math.cos(yawRad) * Math.cos(pitchRad);
-        
-        // Spawn position in front of the dragon's head
-        Vector3 pos = new Vector3(
-            this.x + (-Math.sin(yawRad) * FIREBALL_OFFSET),
-            this.y + 1.5,
-            this.z + (Math.cos(yawRad) * FIREBALL_OFFSET)
-        );
-        
-        CompoundTag fireballNBT = Entity.getDefaultNBT(pos)
-            .putList(new ListTag<DoubleTag>("Motion")
-                .add(new DoubleTag("", motX * FIREBALL_SPEED))
-                .add(new DoubleTag("", motY * FIREBALL_SPEED))
-                .add(new DoubleTag("", motZ * FIREBALL_SPEED)))
-            .putList(new ListTag<DoubleTag>("Pos")
-                .add(new DoubleTag("", pos.x))
-                .add(new DoubleTag("", pos.y))
-                .add(new DoubleTag("", pos.z)))
-            .putLong("DragonID", this.getId());
-        
-        EntityBedFireBall fireball = new EntityBedFireBall(this.getChunk(), fireballNBT, this);
-        fireball.setExplode(true);
-        fireball.setMotion(new Vector3(motX * FIREBALL_SPEED, motY * FIREBALL_SPEED, motZ * FIREBALL_SPEED));
-        fireball.spawnToAll();
-
-        // Check if fire trail is enabled in config
-        boolean fireTrailEnabled = DragonPlugin.getInstance().getConfig().getBoolean("fireball.fire-trail", true);
-        
-        if (fireTrailEnabled) {
-            // Add multiple spiral particle trails
-            DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(DragonPlugin.getInstance(), () -> {
-                if (fireball.isClosed()) {
-                    return; // Stop if fireball is gone
-                }
-                
-                // Create 3 spiral trails with different radii and speeds
-                double time = (System.currentTimeMillis() - now) / 100.0; // Time factor for spiral
-                for (int i = 0; i < 3; i++) {
-                    double radius = 0.3 + (i * 0.2); // Different radius for each spiral
-                    double speed = 2.0 + (i * 0.5); // Different speed for each spiral
-                    
-                    // Calculate spiral positions
-                    double spiralX = Math.cos(time * speed) * radius;
-                    double spiralY = Math.sin(time * speed) * radius;
-                    double spiralZ = Math.cos(time * speed + Math.PI/2) * radius;
-                    
-                    Vector3 particlePos = fireball.getPosition().add(spiralX, spiralY, spiralZ);
-                    
-                    // Add randomized flame and smoke particles
-                    if (Math.random() < 0.7) { // 70% chance for flame
-                        fireball.level.addParticle(new cn.nukkit.level.particle.FlameParticle(particlePos));
-                    }
-                    if (Math.random() < 0.3) { // 30% chance for smoke
-                        fireball.level.addParticle(new cn.nukkit.level.particle.SmokeParticle(particlePos));
-                    }
-                }
-                
-                // Add random sparks around the fireball
-                for (int i = 0; i < 2; i++) {
-                    double offsetX = (Math.random() - 0.5) * 0.5;
-                    double offsetY = (Math.random() - 0.5) * 0.5;
-                    double offsetZ = (Math.random() - 0.5) * 0.5;
-                    Vector3 sparkPos = fireball.getPosition().add(offsetX, offsetY, offsetZ);
-                    fireball.level.addParticle(new cn.nukkit.level.particle.FlameParticle(sparkPos));
-                }
-            }, 1); // Run every tick
-        }
-        
-        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_ENDER_DRAGON);
-        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_GHAST);
     }
 
     @Override
@@ -630,5 +664,144 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             }
         }
         super.close();
+    }
+
+    @Override
+    public void saveNBT() {
+        super.saveNBT();
+        
+        // Save customization to NBT
+        this.namedTag.putString("DragonType", this.dragonType);
+        this.namedTag.putString("ParticleEffect", this.particleEffect);
+        this.namedTag.putString("DragonColor", this.dragonColor);
+    }
+
+    public void setDragonType(String type) {
+        if (type == null) {
+            type = "Fire Dragon"; // Default to Fire Dragon if null
+        }
+        this.dragonType = type;
+        // Apply visual changes based on type
+        switch (type) {
+            case "Fire Dragon":
+                this.fireProof = true;
+                break;
+            case "Ice Dragon":
+                this.fireProof = false;
+                // Add ice resistance
+                break;
+            case "Lightning Dragon":
+                this.fireProof = true;
+                // Add lightning effects
+                break;
+            default:
+                this.fireProof = true; // Default behavior
+                break;
+        }
+    }
+
+    public String getDragonType() {
+        return this.dragonType;
+    }
+
+    public void setParticleEffect(String effect) {
+        this.particleEffect = effect;
+    }
+
+    public String getParticleEffect() {
+        return this.particleEffect;
+    }
+
+    public void setDragonColor(String color) {
+        this.dragonColor = color;
+        // Apply color changes
+        // This would typically involve changing the dragon's texture or particle colors
+    }
+
+    public String getDragonColor() {
+        return this.dragonColor;
+    }
+
+    private void applyCustomizations() {
+        // Apply particle effects based on type and customization
+        if (this.dragonType == null) {
+            this.dragonType = "Fire Dragon"; // Default to Fire Dragon if null
+        }
+        if (this.particleEffect == null) {
+            this.particleEffect = "Flame Trail"; // Default particle effect
+        }
+        
+        switch (this.dragonType) {
+            case "Fire Dragon":
+                if (this.particleEffect.equals("Flame Trail")) {
+                    this.level.addParticle(new cn.nukkit.level.particle.FlameParticle(this.add(0, 1.2, 0)));
+                }
+                break;
+            case "Ice Dragon":
+                if (this.particleEffect.equals("Ice Trail")) {
+                    // Add ice particles
+                    this.level.addParticleEffect(this.add(0, 1.2, 0), ParticleEffect.FALLING_DUST_TOP_SNOW);
+                }
+                break;
+            case "Lightning Dragon":
+                if (this.particleEffect.equals("Lightning Trail")) {
+                    // Add lightning particles
+                    this.level.addParticle(new cn.nukkit.level.particle.ElectricSparkParticle(this.add(0, 1.2, 0)));
+                }
+                break;
+            default:
+                // Default to fire particles
+                this.level.addParticle(new cn.nukkit.level.particle.FlameParticle(this.add(0, 1.2, 0)));
+                break;
+        }
+    }
+
+    public void setShardManager(DragonShardManager manager) {
+        this.shardManager = manager;
+    }
+
+    @Override
+    public void setHealth(float health) {
+        super.setHealth(health);
+        this.setDataProperty(new FloatEntityData(DATA_HEALTH, health));
+    }
+
+    private void shootFireball() {
+        // Calculate projectile spawn position
+        Vector3 pos = this.add(0, this.getEyeHeight(), 0);
+        Vector3 directionVector = this.getDirectionVector();
+        Vector3 spawnPos = pos.add(directionVector.multiply(FIREBALL_OFFSET));
+
+        // Create and spawn fireball
+        CompoundTag nbt = Entity.getDefaultNBT(spawnPos);
+        EntityBedFireBall fireball = new EntityBedFireBall(this.getChunk(), nbt, this);
+        fireball.setMotion(directionVector.multiply(FIREBALL_SPEED));
+        fireball.spawnToAll();
+    }
+
+    private void shootIceball() {
+        // Calculate projectile spawn position
+        Vector3 pos = this.add(0, this.getEyeHeight(), 0);
+        Vector3 directionVector = this.getDirectionVector();
+        Vector3 spawnPos = pos.add(directionVector.multiply(FIREBALL_OFFSET));
+
+        // Create and spawn iceball
+        CompoundTag nbt = Entity.getDefaultNBT(spawnPos);
+        EntityIceBall iceball = new EntityIceBall(this.getChunk(), nbt, this);
+        iceball.setMotion(directionVector.multiply(FIREBALL_SPEED));
+        iceball.spawnToAll();
+    }
+
+    private void shootLightningBall() {
+        // Calculate projectile spawn position
+        Vector3 pos = this.add(0, this.getEyeHeight(), 0);
+        Vector3 directionVector = this.getDirectionVector();
+        Vector3 spawnPos = pos.add(directionVector.multiply(FIREBALL_OFFSET));
+
+        // Create and spawn lightning ball
+        CompoundTag nbt = Entity.getDefaultNBT(spawnPos);
+        EntityLightningBall lightningBall = new EntityLightningBall(this.getChunk(), nbt, this);
+        lightningBall.setMotion(directionVector.multiply(FIREBALL_SPEED));
+        lightningBall.spawnToAll();
     }
 }

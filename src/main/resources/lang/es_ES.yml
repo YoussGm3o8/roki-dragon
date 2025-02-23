@@ -1,0 +1,32 @@
+gui:
+  mainMenu:
+    title: "Gestión del Dragón"
+    buttons:
+      customize: "Personalización del Dragón"
+      customize.lore:
+        - "Cambia la apariencia"
+        - "y efectos especiales de tu dragón"
+      storage: "Almacenamiento de Huevos"
+      storage.lore:
+        - "Almacena y gestiona tus"
+        - "huevos de dragón de forma segura"
+  customization:
+    title: "Personalización del Dragón"
+    buttons:
+      type:
+        fire: "Dragón de Fuego"
+        ice: "Dragón de Hielo"
+        lightning: "Dragón de Relámpago"
+      effects:
+        flame: "Rastro de Fuego"
+        ice: "Rastro de Hielo"
+        lightning: "Rastro de Relámpago"
+      color:
+        red: "Dragón Rojo"
+        blue: "Dragón Azul"
+        yellow: "Dragón Amarillo"
+  storage:
+    title: "Almacenamiento de Huevos"
+    messages:
+      saved: "¡Almacenamiento de huevos guardado!"
+      loaded: "¡Almacenamiento de huevos cargado!" 

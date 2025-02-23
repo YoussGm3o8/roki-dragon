@@ -36,6 +36,6 @@ public class SummonDragonCommand extends Command {
                 return plugin.handleAdminHatchEggCommand(player, targetName);
             }
         }
-        return plugin.handleSummonDragonCommand(player);
+        return plugin.handleSummonDragonCommand(player, args);
     }
 }

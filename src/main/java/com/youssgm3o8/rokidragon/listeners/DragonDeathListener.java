@@ -16,6 +16,7 @@ public class DragonDeathListener implements Listener {
             Player owner = dragon.getOwner();
             if (owner != null) {
                 String ownerUUID = owner.getUniqueId().toString();
+                // Only handle database cleanup, message is sent in DragonEntity.handleDeath()
                 DragonPlugin.getInstance().getDatabaseManager().removeDragon(ownerUUID);
             }
         }

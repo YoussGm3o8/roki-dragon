@@ -1,7 +1,19 @@
+# Language settings
+language:
+  default: "en_US"  # Default language to use
+  fallback: "en_US" # Fallback language if selected language file is missing
+
 dragon-egg-price: 128000
 dragon-hatching-time: 3600 # Hatching time in seconds (default: 1 hour)
 dragon-buy-cooldown: 60 # Cooldown in seconds between purchases (default: 60 seconds)
 dragon-fireball-cooldown: 500 # Cooldown in milliseconds between fireballs (default: 500ms)
+dragon-respawn-time: 900 # Time in seconds before dragon can be respawned after death (default: 15 minutes)
+
+# Dragon stats
+dragon:
+  max-health: 100 # Maximum health points (integer)
+  base-damage: 15.0 # Base damage dealt by attacks
+  damage-reduction: 0.25 # Damage reduction multiplier (0.25 = 75% damage reduction)
 
 # Fireball settings
 fireball:

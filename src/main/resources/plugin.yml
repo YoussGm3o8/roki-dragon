@@ -1,22 +1,25 @@
 name: RokiDragon
 main: com.youssgm3o8.rokidragon.DragonPlugin
 version: 1.0.0
-api: ["1.1.0"]
-load: STARTUP
+api: ["1.0.0"]
 author: YoussGm3o8
-description: A Nukkit plugin that introduces a rideable dragon entity to your Minecraft server.
 
 commands:
+  dragonmanage:
+    description: Open the dragon management GUI
+    usage: /dragonmanage
+    aliases: [dm, dragongui]
+    permission: rokidragon.command.manage
   summondragon:
-    description: Summon or buy a dragon
+    description: Summon your dragon
     usage: /summondragon [buy|lost|admin <player>]
-    permission: rokidragon.command.summon
     aliases: [dragon, drg]
+    permission: rokidragon.command.summon
 
 permissions:
-  rokidragon.command.buy:
-    description: Allows player to buy a dragon egg
+  rokidragon.command.manage:
+    description: Allows using the dragon management command
     default: true
   rokidragon.command.summon:
-    description: Allows player to summon a dragon
+    description: Allows summoning a dragon
     default: true

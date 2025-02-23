@@ -62,47 +62,77 @@ public class EventListenerEdit extends EventListener {
         
         Player player = event.getPlayer();
         if (player.riding instanceof DragonEntity) {
-            if (event.getItem() instanceof ItemFireCharge) {
+            Item item = event.getItem();
+            if (item != null && item.hasCompoundTag() && item.getNamedTag().getBoolean("IsDragonShard")) {
                 event.setCancelled(true);
                 DragonEntity dragon = (DragonEntity) player.riding;
-                dragon.shootFireball(player);
+                dragon.shoot();
             }
         }
 
-        if (event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getItem() == null) return;
+        Item item = event.getItem();
+        if (item == null || item.getId() != BlockID.DRAGON_EGG || !item.hasCompoundTag() || !item.getNamedTag().contains("eggId")) {
+            return;
+        }
         
-        // Egg placement/interaction with cooldown
-        if (event.getItem().getId() == BlockID.DRAGON_EGG &&
-            event.getItem().hasCompoundTag() &&
-            event.getItem().getNamedTag().contains("eggId")) {
-                    
-            UUID uuid = event.getPlayer().getUniqueId();
-            long current = System.currentTimeMillis();
-            if (lastInteract.containsKey(uuid) && current - lastInteract.get(uuid) < INTERACTION_COOLDOWN) {
-                event.setCancelled(true);
-                return;
-            }
-            lastInteract.put(uuid, current);
-            
-            event.setCancelled(true); // Prevent egg placement
-            
-            // NEW: Get "eggId" from the item's NBT and compare with the stored egg for the player.
-            Item item = event.getItem();
-            String itemEggId = item.getNamedTag().getString("eggId");
-            String storedEggId = DragonPlugin.getInstance().getDatabaseManager().getDragonEggId(event.getPlayer().getUniqueId().toString());
+        // Egg interaction with cooldown
+        UUID uuid = event.getPlayer().getUniqueId();
+        long current = System.currentTimeMillis();
+        if (lastInteract.containsKey(uuid) && current - lastInteract.get(uuid) < INTERACTION_COOLDOWN) {
+            event.setCancelled(true);
+            return;
+        }
+        lastInteract.put(uuid, current);
+        
+        event.setCancelled(true); // Prevent egg placement
+        
+        // Get "eggId" from the item's NBT and compare with the stored egg for the player.
+        String itemEggId = item.getNamedTag().getString("eggId");
+        String storedEggId = DragonPlugin.getInstance().getDatabaseManager().getDragonEggId(event.getPlayer().getUniqueId().toString());
+
+        // Check if player is sneaking (shift) for incubation
+        if (player.isSneaking()) {
+            // Handle incubation
             if (storedEggId != null && storedEggId.equals(itemEggId)) {
-                // If the dragon is already spawned (record exists), despawn; otherwise, summon.
+                // Check if egg is already hatched
+                if (DragonPlugin.getInstance().getDatabaseManager().isEggHatched(itemEggId)) {
+                    player.sendMessage("§cThis egg has already hatched!");
+                    return;
+                }
+
+                // Check if another egg is already incubating
+                String incubatingEggId = DragonPlugin.getInstance().getDatabaseManager().getIncubatingEggId(player.getUniqueId().toString());
+                if (incubatingEggId != null && !incubatingEggId.equals(itemEggId)) {
+                    player.sendMessage("§cYou can only incubate one egg at a time!");
+                    return;
+                }
+
+                // Toggle incubation
+                boolean isIncubating = DragonPlugin.getInstance().getDatabaseManager().isEggIncubating(itemEggId);
+                DragonPlugin.getInstance().getDatabaseManager().setEggIncubating(itemEggId, !isIncubating);
+                
+                // Update egg lore
+                DragonPlugin.getInstance().getEggManager().updateEggLore(item, itemEggId);
+
+                // Send message
+                String message = !isIncubating ? 
+                    "§aStarted incubating this egg!" :
+                    "§cStopped incubating this egg.";
+                player.sendMessage(message);
+            } else {
+                player.sendMessage("§cThis dragon egg doesn't belong to you! It is going to explode!");
+            }
+        } else {
+            // Normal right-click behavior (summon/despawn)
+            if (storedEggId != null && storedEggId.equals(itemEggId)) {
                 if (DragonPlugin.getInstance().getDatabaseManager().playerHasDragon(player.getUniqueId().toString())) {
                     DragonPlugin.getInstance().despawnDragon(player);
-                    player.sendMessage("§aYour dragon has been despawned!");
                 } else {
-                    DragonPlugin.getInstance().handleSummonDragonCommand(player);
+                    DragonPlugin.getInstance().handleSummonDragonCommand(player, new String[0]);
                 }
             } else {
                 player.sendMessage("§cThis dragon egg doesn't belong to you! It is going to explode!");
             }
-            return;
         }
     }
 
