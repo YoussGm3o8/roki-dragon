@@ -26,11 +26,15 @@ import cn.nukkit.network.protocol.DataPacket;
 import cn.nukkit.network.protocol.LevelSoundEventPacket;
 import cn.nukkit.network.protocol.SetEntityLinkPacket;
 import cn.nukkit.network.protocol.types.EntityLink;
+import cn.nukkit.scheduler.TaskHandler;
 import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
 import nukkitcoders.mobplugin.entities.HorseBase;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.Map;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
@@ -44,12 +48,11 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private static final float VERTICAL_MOTION_UP = 0.2f;
     private static final float VERTICAL_MOTION_DOWN = -0.2f;
     private static final float PASSENGER_HEIGHT_OFFSET = 2.5f;
-    private static final float FIREBALL_SPEED = 2f;  // Increased from 1.5f
+    private static final float FIREBALL_SPEED = 2f;
     private static final float FIREBALL_OFFSET = 8.0f;
-    private static final long FIREBALL_COOLDOWN = 500; // cooldown in milliseconds
     private long lastFireballTime = 0;
 
-    private boolean isTeleporting = false; // Flag to track teleportation
+    private boolean isTeleporting = false;
     private long dismountStart = 0;
     private boolean shouldDespawn = false;
 
@@ -57,8 +60,11 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     protected float moveSpeed = DEFAULT_MOVE_SPEED;
     private Player owner;
 
-    // New field for identifying the dragon
     private String dragonId;
+
+    // Add fields to store original XP values
+    private final Map<UUID, Integer> originalExperience = new HashMap<>();
+    private final Map<UUID, Integer> originalXpLevel = new HashMap<>();
 
     public DragonEntity(FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
@@ -77,7 +83,6 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_FIRE_IMMUNE, true);
         this.setDataProperty(new FloatEntityData(DATA_HEALTH, 100f));
 
-        // Ensure the entity has a saddle by default
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SADDLED, true);
 
         this.setDataProperty(new FloatEntityData(DATA_BOUNDING_BOX_WIDTH, this.getWidth()));
@@ -154,6 +159,15 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
                 entity.setDataFlag(DATA_FLAGS, DATA_FLAG_RIDING, true);
                 entity.setDataProperty(new Vector3fEntityData(DATA_RIDER_SEAT_POSITION, new Vector3f(-0.5f, 4f, -1f)));
                 passengers.add(entity);
+
+                // Store original XP values when mounting
+                if (entity instanceof Player) {
+                    Player player = (Player) entity;
+                    originalExperience.put(player.getUniqueId(), player.getExperience());
+                    originalXpLevel.put(player.getUniqueId(), player.getExperienceLevel());
+                    // Set XP bar to full (1000 is max experience per level)
+                    player.setExperience(1000, player.getExperienceLevel());
+                }
             }
 
             return true;
@@ -165,16 +179,21 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     
     @Override
     public boolean dismountEntity(Entity entity) {
+        if (entity instanceof Player) {
+            Player player = (Player) entity;
+            // Restore original XP values before dismounting
+            restorePlayerXP(player);
+        }
+        
         if (entity.riding == null || !this.passengers.contains(entity)) {
             return false;
         }
 
         if (isTeleporting) {
-            // Avoid further teleportation if already in progress
             return false;
         }
 
-        isTeleporting = true; // Mark teleportation as in progress
+        isTeleporting = true;
 
         SetEntityLinkPacket pk = new SetEntityLinkPacket();
         pk.vehicleUniqueId = this.getId();
@@ -186,22 +205,20 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         entity.setDataFlag(DATA_FLAGS, DATA_FLAG_RIDING, false);
         this.passengers.remove(entity);
 
-        // Perform teleportation if necessary
         if (entity instanceof Player) {
             Player player = (Player) entity;
-            Vector3 currentPosition = this.getPosition();  // Get the current position of the entity
-            player.teleport(currentPosition);  // Teleport the player to the DragonEntity position
+            Vector3 currentPosition = this.getPosition();
+            player.teleport(currentPosition);
             
-            // Apply resistance effect (ID 11) for 5 seconds with amplifier 254 (for resistance 255)
             player.addEffect(cn.nukkit.potion.Effect.getEffect(cn.nukkit.potion.Effect.RESISTANCE)
-                .setDuration(5 * 20) // 5 seconds in ticks
+                .setDuration(5 * 20)
                 .setAmplifier(254));
         }
 
         this.dismountStart = System.currentTimeMillis();
         this.shouldDespawn = true;
 
-        isTeleporting = false; // Reset the teleportation flag
+        isTeleporting = false;
         return true;
     }
     
@@ -219,13 +236,11 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             }
         }
 
-        // Only move if there are passengers
         if (!this.passengers.isEmpty()) {
             this.setImmobile(false);
             this.move(this.motionX, 0, this.motionZ);
             this.updateMovement();
         } else {
-            // Stop any motion if there are no passengers
             this.setImmobile(true);
             this.motionX = 0;
             this.motionY = 0;
@@ -242,7 +257,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         return super.onUpdate(currentTick);
     }
 
-    private static final float MAX_SPEED = 0.92f; // Set a maximum speed for the dragon
+    private static final float MAX_SPEED = 0.92f;
     @Override
     public void onPlayerInput(Player player, double strafe, double forward) {
         this.stayTime = 0;
@@ -250,43 +265,29 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.route = null;
         this.target = null;
     
-        double playerYaw = (player.getYaw() + 180) % 360; // Get the player's yaw and normalize it
+        double playerYaw = (player.getYaw() + 180) % 360;
         double playerPitch = player.getPitch();
 
         this.setRotation(playerYaw, playerPitch);
 
-        // if (forward < 0) {
-        //     forward = forward / 2;
-        // }
         forward = -forward;
         strafe = -strafe;
     
         strafe *= 0.4;
     
         double f = strafe * strafe + forward * forward;
-        double friction = 0.91; // Friction for smoother movement
+        double friction = 0.91;
     
-        // Make the dragon face the direction the player is looking at
-
-        
-        
-        // this.setYaw(playerYaw ); // Align the entity's yaw with the player's
-        // this.setHeadYaw(playerYaw); // Align the entity's head yaw with the player's
-        // this.setRotation(playerYaw, this.getPitch());
-
         this.yaw = playerYaw;
     
-        // If the player is looking up (positive pitch), move the dragon upward
-        if (playerPitch < -20) {  // You can adjust the threshold to match your needs
+        if (playerPitch < -20) {
             this.pitch = playerPitch;
             this.motionY = VERTICAL_MOTION_UP;
         } 
-        // If the player is looking down (negative pitch), move the dragon downward
-        else if (playerPitch > 20) {  // You can adjust the threshold to match your needs
+        else if (playerPitch > 20) {
             this.pitch = playerPitch;
             this.motionY = VERTICAL_MOTION_DOWN;
         } 
-        // If the player is looking straight, the dragon doesn't move vertically
         else {
             this.motionY = 0;
             this.pitch = playerPitch;
@@ -303,14 +304,13 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             strafe *= f;
             forward *= f;
     
-            double yawRadians = Math.toRadians(-playerYaw); // Negative yaw for correct direction
+            double yawRadians = Math.toRadians(-playerYaw);
             double sinYaw = Math.sin(yawRadians);             
             double cosYaw = Math.cos(yawRadians);
         
             this.motionX = (strafe * cosYaw + forward * sinYaw) * this.moveSpeed;
             this.motionZ = (forward * cosYaw - strafe * sinYaw) * this.moveSpeed;
 
-            // Limit the speed to the maximum speed
             double speed = Math.sqrt(this.motionX * this.motionX + this.motionZ * this.motionZ);
             if (speed > MAX_SPEED ) {
                 double scale = MAX_SPEED / speed;
@@ -325,8 +325,6 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             this.motionX = 0;
             this.motionZ = 0;
         }
-       // System.out.println(" yaw " +player.getYaw() +" pitch "+ player.getPitch() + " position " + player.getPosition());
-        
     }
 
      @Override
@@ -358,17 +356,17 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
     @Override
     public float getWidth() {
-        return 4.0f; // Increased from default
+        return 4.0f;
     }
 
     @Override
     public float getHeight() {
-        return 4.0f; // Increased from default
+        return 4.0f;
     }
 
     @Override
     public float getLength() {
-        return 6.0f; // Added length parameter
+        return 6.0f;
     }
    
     @Override
@@ -379,7 +377,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     @Override
     public boolean attack(EntityDamageEvent source) {
         if (source.getDamage() >= this.getHealth()) {
-            dismountAllPassengers(); // Dismount all passengers before the entity dies
+            dismountAllPassengers();
         }
         return super.attack(source);
     }
@@ -392,7 +390,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
     @Override
     public void kill() {
-        dismountAllPassengers(); // Ensure all passengers are dismounted when the dragon is killed
+        dismountAllPassengers();
         super.kill();
     }
 
@@ -429,7 +427,6 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         return this.owner;
     }
 
-    // Getter for dragonId
     public String getDragonId() {
         return this.dragonId;
     }
@@ -449,43 +446,59 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     }
 
     public void shootFireball(Player rider) {
+        int cooldown = DragonPlugin.getInstance().getConfig().getInt("dragon-fireball-cooldown", 500);
         long now = System.currentTimeMillis();
-        if (now - lastFireballTime < FIREBALL_COOLDOWN) {
+        if (now - lastFireballTime < cooldown) {
             return;
         }
+
+        // Check and consume fire charge first
+        if (!consumeFireCharge(rider)) {
+            rider.sendMessage("§cYou need a fire charge to shoot fireballs!");
+            return;
+        }
+        
         lastFireballTime = now;
         
-        // Save original XP values using correct methods
-        final int originalExperience = rider.getExperience();
-        final int originalXpLevel = rider.getExperienceLevel();
-        // Override XP bar to start empty
-        rider.setExperience(0, originalXpLevel);
+        // Store original XP values before setting to 0
+        UUID uuid = rider.getUniqueId();
+        if (!originalExperience.containsKey(uuid)) {
+            originalExperience.put(uuid, rider.getExperience());
+            originalXpLevel.put(uuid, rider.getExperienceLevel());
+        }
         
-        // Schedule repeating task for XP update
-        final int[] ticks = {0};
-        final int intervalTicks = 10;
-        final cn.nukkit.scheduler.TaskHandler[] taskHandler = new cn.nukkit.scheduler.TaskHandler[1];
-        taskHandler[0] = DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(
-            DragonPlugin.getInstance(),
-            new Runnable() {
-                @Override
-                public void run() {
-                    ticks[0]++;
-                    float progress = (float) ticks[0] / intervalTicks;
-                    if (progress > 1f) {
-                        progress = 1f;
-                    }
-                    // Update XP progress simulation using calculated progress
-                    rider.setExperience((int) (originalExperience * progress), originalXpLevel);
-                    if (ticks[0] >= intervalTicks) {
-                        // Restore original XP values
-                        rider.setExperience(originalExperience, originalXpLevel);
-                        taskHandler[0].cancel();
-                    }
-                }
-            },
-            1
-        );
+        // Force XP bar to 0 and keep level
+        int currentLevel = rider.getExperienceLevel();
+        rider.setExperience(0, currentLevel); // Set both total XP and level
+        rider.sendExperience(0); // Force client-side update
+        
+        // Schedule repeating task for smooth XP regeneration
+        final int totalTicks = cooldown / 50; // Convert ms to ticks
+        final int xpPerTick = 1000 / totalTicks; // Divide total XP by number of ticks
+        final int[] currentTick = {0};
+        
+        // Store TaskHandler instead of int
+        final TaskHandler[] task = {null};
+        if (task[0] != null) {
+            task[0].cancel(); // Cancel any existing task
+        }
+        task[0] = DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(DragonPlugin.getInstance(), () -> {
+            if (!rider.isOnline() || rider.riding != this) {
+                task[0].cancel();
+                return;
+            }
+            currentTick[0]++;
+            int newXp = Math.min(1000, currentTick[0] * xpPerTick);
+            rider.setExperience(newXp, currentLevel);
+            rider.sendExperience(newXp);
+            
+            if (currentTick[0] >= totalTicks) {
+                rider.setExperience(1000, currentLevel);
+                rider.sendExperience(1000);
+                task[0].cancel();
+                return;
+            }
+        }, 1);
         
         // Compute the forward vector using yaw and pitch
         double yawRad = Math.toRadians(this.yaw + 180);
@@ -516,17 +529,56 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         fireball.setExplode(true);
         fireball.setMotion(new Vector3(motX * FIREBALL_SPEED, motY * FIREBALL_SPEED, motZ * FIREBALL_SPEED));
         fireball.spawnToAll();
+
+        // Check if fire trail is enabled in config
+        boolean fireTrailEnabled = DragonPlugin.getInstance().getConfig().getBoolean("fireball.fire-trail", true);
         
-        // Remove delayed task that spawns fire
+        if (fireTrailEnabled) {
+            // Add multiple spiral particle trails
+            DragonPlugin.getInstance().getServer().getScheduler().scheduleRepeatingTask(DragonPlugin.getInstance(), () -> {
+                if (fireball.isClosed()) {
+                    return; // Stop if fireball is gone
+                }
+                
+                // Create 3 spiral trails with different radii and speeds
+                double time = (System.currentTimeMillis() - now) / 100.0; // Time factor for spiral
+                for (int i = 0; i < 3; i++) {
+                    double radius = 0.3 + (i * 0.2); // Different radius for each spiral
+                    double speed = 2.0 + (i * 0.5); // Different speed for each spiral
+                    
+                    // Calculate spiral positions
+                    double spiralX = Math.cos(time * speed) * radius;
+                    double spiralY = Math.sin(time * speed) * radius;
+                    double spiralZ = Math.cos(time * speed + Math.PI/2) * radius;
+                    
+                    Vector3 particlePos = fireball.getPosition().add(spiralX, spiralY, spiralZ);
+                    
+                    // Add randomized flame and smoke particles
+                    if (Math.random() < 0.7) { // 70% chance for flame
+                        fireball.level.addParticle(new cn.nukkit.level.particle.FlameParticle(particlePos));
+                    }
+                    if (Math.random() < 0.3) { // 30% chance for smoke
+                        fireball.level.addParticle(new cn.nukkit.level.particle.SmokeParticle(particlePos));
+                    }
+                }
+                
+                // Add random sparks around the fireball
+                for (int i = 0; i < 2; i++) {
+                    double offsetX = (Math.random() - 0.5) * 0.5;
+                    double offsetY = (Math.random() - 0.5) * 0.5;
+                    double offsetZ = (Math.random() - 0.5) * 0.5;
+                    Vector3 sparkPos = fireball.getPosition().add(offsetX, offsetY, offsetZ);
+                    fireball.level.addParticle(new cn.nukkit.level.particle.FlameParticle(sparkPos));
+                }
+            }, 1); // Run every tick
+        }
         
-        // Play sound effects
         this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_ENDER_DRAGON);
         this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_IMITATE_GHAST);
     }
 
     @Override
     public boolean canCollideWith(Entity entity) {
-        // Don't collide with fireballs shot by this dragon
         if (entity instanceof EntityGhastFireBall) {
             CompoundTag nbt = entity.namedTag;
             if (nbt != null && nbt.contains("DragonID") && nbt.getLong("DragonID") == this.getId()) {
@@ -541,7 +593,8 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         
         // Find fire charge in player's inventory
         for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
-            if (player.getInventory().getItem(slot) instanceof ItemFireCharge) {
+            Item item = player.getInventory().getItem(slot);
+            if (item.getId() == Item.FIRE_CHARGE) {
                 fireChargeSlot = slot;
                 break;
             }
@@ -551,11 +604,31 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             return false;
         }
 
-        // Remove one fire charge from the stack
+        // Remove one fire charge
         Item fireCharge = player.getInventory().getItem(fireChargeSlot);
         fireCharge.setCount(fireCharge.getCount() - 1);
         player.getInventory().setItem(fireChargeSlot, fireCharge);
         
         return true;
+    }
+
+    public void restorePlayerXP(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (originalExperience.containsKey(uuid) && originalXpLevel.containsKey(uuid)) {
+            player.setExperience(originalExperience.get(uuid), originalXpLevel.get(uuid));
+            originalExperience.remove(uuid);
+            originalXpLevel.remove(uuid);
+        }
+    }
+
+    @Override
+    public void close() {
+        // Restore XP for all passengers before closing
+        for (Entity passenger : new ArrayList<>(this.passengers)) {
+            if (passenger instanceof Player) {
+                restorePlayerXP((Player) passenger);
+            }
+        }
+        super.close();
     }
 }

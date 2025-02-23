@@ -1,3 +1,11 @@
 dragon-egg-price: 128000
 dragon-hatching-time: 3600 # Hatching time in seconds (default: 1 hour)
 dragon-buy-cooldown: 60 # Cooldown in seconds between purchases (default: 60 seconds)
+dragon-fireball-cooldown: 500 # Cooldown in milliseconds between fireballs (default: 500ms)
+
+# Fireball settings
+fireball:
+  explosion-radius: 3.0 # Size of the explosion (default: 3.0)
+  set-fire: true # Whether fireballs should set blocks on fire
+  fire-trail: true # Whether fireballs should have particle trail effects
+  fire-chance: 0.3333 # Chance for blocks to catch fire (0.0 to 1.0)

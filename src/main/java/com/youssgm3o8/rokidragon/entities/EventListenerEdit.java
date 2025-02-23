@@ -108,7 +108,13 @@ public class EventListenerEdit extends EventListener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // When a player logs off, despawn their dragon if spawned.
-        DragonPlugin.getInstance().despawnDragon(event.getPlayer());
+        Player player = event.getPlayer();
+        // If player was riding a dragon, restore their XP
+        if (player.riding instanceof DragonEntity) {
+            DragonEntity dragon = (DragonEntity) player.riding;
+            dragon.restorePlayerXP(player);
+        }
+        // Despawn their dragon if spawned
+        DragonPlugin.getInstance().despawnDragon(player);
     }
 }
