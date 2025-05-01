@@ -4,14 +4,14 @@ import cn.nukkit.Player;
 import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
 import com.youssgm3o8.rokidragon.DragonPlugin;
-import com.youssgm3o8.rokidragon.gui.DragonManagementGUI;
+import com.youssgm3o8.rokidragon.gui.FormBasedDragonGUI;
 
 public class DragonManageCommand extends Command {
     private final DragonPlugin plugin;
-    private final DragonManagementGUI gui;
+    private final FormBasedDragonGUI gui;
 
-    public DragonManageCommand(DragonPlugin plugin, DragonManagementGUI gui) {
-        super("dragonmanage", "Open the dragon management interface", "/dragonmanage", new String[]{"dm", "dragongui"});
+    public DragonManageCommand(DragonPlugin plugin, FormBasedDragonGUI gui) {
+        super("dragonmanage", "Open the dragon management interface", "/dragonmanage [lost]", new String[]{"dm", "dragongui"});
         this.setPermission("rokidragon.command.manage");
         this.plugin = plugin;
         this.gui = gui;
@@ -28,7 +28,32 @@ public class DragonManageCommand extends Command {
             return false;
         }
 
-        gui.openMainMenu((Player) sender);
+        Player player = (Player) sender;
+        
+        try {
+            if (args.length > 0) {
+                switch (args[0].toLowerCase()) {
+                    case "lost":
+                        // Handle the 'lost' subcommand by opening the lost eggs GUI
+                        gui.openLostEggsMenu(player);
+                        return true;
+                    case "recipes":
+                        // Show crafting recipes for dragon shards
+                        plugin.getShardManager().showRecipesToPlayer(player);
+                        return true;
+                }
+            }
+
+            // Default behavior - open the main menu
+            plugin.getLogger().info("Opening main dragon GUI for " + player.getName());
+            gui.openMainMenu(player);
+            
+        } catch (Exception e) {
+            plugin.getLogger().error("Error opening GUI for " + player.getName() + ": " + e.getMessage());
+            e.printStackTrace();
+            player.sendMessage("§cThere was an error opening the GUI. Please check the server logs.");
+        }
+        
         return true;
     }
 } 

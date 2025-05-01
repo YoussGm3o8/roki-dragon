@@ -1,27 +1,30 @@
 package com.youssgm3o8.rokidragon.entities;
 
-import cn.nukkit.level.format.FullChunk;
-import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.entity.Entity;
-import cn.nukkit.event.entity.EntityExplosionPrimeEvent;
-import cn.nukkit.level.GameRule;
-import cn.nukkit.level.particle.DustParticle;
-import cn.nukkit.entity.weather.EntityLightning;
-import cn.nukkit.math.Vector3;
 import cn.nukkit.entity.projectile.EntityProjectile;
-import cn.nukkit.level.Explosion;
+import cn.nukkit.entity.weather.EntityLightning;
+import cn.nukkit.event.entity.EntityExplosionPrimeEvent;
 import cn.nukkit.item.Item;
+import cn.nukkit.level.Explosion;
 import cn.nukkit.level.Position;
+import cn.nukkit.level.format.FullChunk;
+import cn.nukkit.level.particle.DustParticle;
+import cn.nukkit.math.Vector3;
+import cn.nukkit.nbt.tag.CompoundTag;
+import com.youssgm3o8.rokidragon.DragonPlugin;
 
 public class EntityLightningBall extends EntityProjectile {
     private Entity shootingEntity;
+    private DragonPlugin plugin;
 
-    public EntityLightningBall(FullChunk chunk, CompoundTag nbt) {
+    public EntityLightningBall(DragonPlugin plugin, FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
+        this.plugin = plugin;
     }
     
-    public EntityLightningBall(FullChunk chunk, CompoundTag nbt, Entity shootingEntity) {
+    public EntityLightningBall(DragonPlugin plugin, FullChunk chunk, CompoundTag nbt, Entity shootingEntity) {
         super(chunk, nbt);
+        this.plugin = plugin;
         this.shootingEntity = shootingEntity;
     }
 
@@ -58,7 +61,7 @@ public class EntityLightningBall extends EntityProjectile {
 
     @Override
     public int getNetworkId() {
-        return Item.PRISMARINE_CRYSTALS; // Use prismarine crystal model
+        return Item.PRISMARINE_SHARD; // Use prismarine shard model
     }
 
     @Override
@@ -85,12 +88,14 @@ public class EntityLightningBall extends EntityProjectile {
         if (!this.closed) {
             this.close();
             
-            // Create explosion effect
-            EntityExplosionPrimeEvent ev = new EntityExplosionPrimeEvent(this, 1.2);
+            // Get explosion radius from config
+            double explosionRadius = plugin.getConfig().getDouble("abilities.lightning_ball.explosion_radius", 1.2);
+            
+            EntityExplosionPrimeEvent ev = new EntityExplosionPrimeEvent(this, explosionRadius);
             this.server.getPluginManager().callEvent(ev);
             
             if (!ev.isCancelled()) {
-                // Create explosion using Explosion class
+                // Create explosion using Explosion class with config radius (via event force)
                 Position explodePos = new Position(this.x, this.y, this.z, this.level);
                 Explosion explosion = new Explosion(explodePos, ev.getForce(), this);
                 explosion.explodeA();
@@ -115,12 +120,14 @@ public class EntityLightningBall extends EntityProjectile {
         if (!this.closed) {
             this.close();
             
-            // Create explosion effect
-            EntityExplosionPrimeEvent ev = new EntityExplosionPrimeEvent(this, 1.2);
+            // Get explosion radius from config
+            double explosionRadius = plugin.getConfig().getDouble("abilities.lightning_ball.explosion_radius", 1.2);
+            
+            EntityExplosionPrimeEvent ev = new EntityExplosionPrimeEvent(this, explosionRadius);
             this.server.getPluginManager().callEvent(ev);
             
             if (!ev.isCancelled()) {
-                // Create explosion using Explosion class
+                // Create explosion using Explosion class with config radius (via event force)
                 Position explodePos = new Position(position.x, position.y, position.z, this.level);
                 Explosion explosion = new Explosion(explodePos, ev.getForce(), this);
                 explosion.explodeA();

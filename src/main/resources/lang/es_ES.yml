@@ -2,21 +2,51 @@ gui:
   mainMenu:
     title: "Gestión del Dragón"
     buttons:
-      customize: "Personalización del Dragón"
-      customize.lore:
-        - "Cambia la apariencia"
-        - "y efectos especiales de tu dragón"
-      storage: "Almacenamiento de Huevos"
-      storage.lore:
-        - "Almacena y gestiona tus"
-        - "huevos de dragón de forma segura"
+      customize:
+        name: "Personalización del Dragón"
+        lore:
+          - "Cambia la apariencia"
+          - "y efectos especiales de tu dragón"
+      storage:
+        name: "Almacenamiento de Huevos"
+        lore:
+          - "Almacena y gestiona tus"
+          - "huevos de dragón de forma segura"
+      buyEgg:
+        name: "Comprar Huevo de Dragón"
+        lore:
+          - "Compra un nuevo huevo de dragón"
+          - "Precio: ${0}"
+          - "Tienes: {1}/{2} huevos"
+        max:
+          - "Ya tienes el máximo"
+          - "número de huevos de dragón ({0})"
+      lostEgg:
+        name: "Reportar Huevo Perdido"
+        lore:
+          - "Si perdiste un huevo de dragón,"
+          - "repórtalo aquí"
+      help:
+        name: "Ayuda de Dragón"
+        lore:
+          - "Información sobre dragones"
+          - "y cómo usarlos"
   customization:
     title: "Personalización del Dragón"
     buttons:
       type:
         fire: "Dragón de Fuego"
+        fire_lore:
+          - "Haz clic para cambiar tu dragón"
+          - "a un Dragón de Fuego"
         ice: "Dragón de Hielo"
+        ice_lore:
+          - "Haz clic para cambiar tu dragón"
+          - "a un Dragón de Hielo"
         lightning: "Dragón de Relámpago"
+        lightning_lore:
+          - "Haz clic para cambiar tu dragón"
+          - "a un Dragón de Relámpago"
       effects:
         flame: "Rastro de Fuego"
         ice: "Rastro de Hielo"
@@ -25,8 +55,159 @@ gui:
         red: "Dragón Rojo"
         blue: "Dragón Azul"
         yellow: "Dragón Amarillo"
+      back:
+        name: "Volver"
+        lore:
+          - "Volver al menú principal"
+        default_lore: "§7Haz clic para volver" # Lore genérico para botón de volver
+      next: # Nueva sección para botón siguiente
+        name: "§aSiguiente"
+        default_lore: "§7Haz clic para ir a la página siguiente"
   storage:
     title: "Almacenamiento de Huevos"
+    buttons:
+      back:
+        name: "Volver"
+        lore:
+          - "Volver al menú principal"
+      help:
+        name: "Ayuda"
+        lore:
+          - "Almacena tus huevos de dragón aquí"
+          - "Máximo {0} huevos"
+          - "Haz clic en un huevo para recuperarlo"
+          - "Suelta un huevo aquí para almacenarlo"
     messages:
       saved: "¡Almacenamiento de huevos guardado!"
-      loaded: "¡Almacenamiento de huevos cargado!" 
+      loaded: "¡Almacenamiento de huevos cargado!"
+  purchaseMenu:
+    title: "Compra de Huevo de Dragón"
+    info:
+      name: "Huevo de Dragón"
+      lore:
+        - "Compra un nuevo huevo de dragón"
+        - "El tipo de dragón se determinará"
+        - "por cómo incubes el huevo."
+        - ""
+        - "Precio: {0} monedas"
+    buttons:
+      confirm:
+        name: "Confirmar Compra"
+        lore:
+          - "Haz clic para confirmar la compra"
+          - "y recibir tu huevo"
+      cancel:
+        name: "Cancelar"
+        lore:
+          - "Haz clic para cancelar la compra"
+          - "y volver al menú principal"
+  lostEgg:
+    menu:
+      title: "Huevos de Dragón Perdidos"
+      egg:
+        name: "{0} {1} {2}"
+        status:
+          hatched: "[Eclosionado]"
+          egg: "[Huevo]"
+          active: "[Activo]"
+        lore:
+  errors:
+    playerOnly: "§cEste comando solo puede ser usado por jugadores."
+    noPermission: "§cNo tienes permiso para usar este comando."
+    noDragonYet: "§cAún no tienes un huevo de dragón. ¡Compra uno primero!"
+    summonFailed: "§cError al invocar a tu dragón. Por favor, inténtalo de nuevo."
+    nameLength: "§cEl nombre del dragón debe tener entre {0} y {1} caracteres."
+    genericError: "§cOcurrió un error inesperado. Por favor, contacta a un administrador."
+    noPermissionAdmin: "§cNo tienes permiso para usar este comando de administrador."
+    maxEggs: "§cYa tienes el máximo número de huevos de dragón (§e{0}§c)!"
+    noDragon: "§cNo tienes un dragón activo. ¡Eclosiona un huevo primero!"
+    buyFirst: "§cAún no tienes un huevo de dragón. Usa §a/dragon buy§c o la GUI para comprar uno."
+    notHatched: "§c¡Tu huevo de dragón aún no ha eclosionado! Incúbalo primero."
+    cooldown: "§cDebes esperar §e{0}§c segundos antes de invocar a tu dragón de nuevo."
+    alreadySummoned: "§c¡Tu dragón ya está invocado!"
+    notSummoned: "§cNo tienes un dragón invocado ahora mismo."
+    dragonDefeated: "§c¡Tu dragón ha sido derrotado!"
+    lostForever: "§cHa regresado al vacío y no puede ser invocado de nuevo."
+    eggNotBelongToYou: "§c¡Este huevo de dragón no te pertenece! ¡Es inestable!"
+    eggAlreadyHatched: "§c¡Este huevo ya ha eclosionado en un dragón!"
+    oneEggAtATime: "§c¡Solo puedes incubar un huevo a la vez!"
+    needShiftClick: "§c¡Tu huevo de dragón no está eclosionado! Usa §bShift + Clic Derecho§c para alternar la incubación."
+    cannotPlaceEgg: "§c¡Los huevos de dragón no se pueden colocar! Usa §bShift + Clic Derecho§c para incubar."
+    invalidEgg: "§c¡Este no es un huevo de dragón válido!"
+  help:
+    title: "§e=== Comandos de Dragón ==="
+    help: "§a/dragon help §7- Muestra esta lista de comandos."
+    info: "§a/dragon info §7- Muestra información sobre tu dragón activo."
+    summon: "§a/dragon summon §7- Invoca a tu dragón eclosionado."
+    despawn: "§a/dragon despawn §7- Despide a tu dragón invocado."
+    name: "§a/dragon name <Nombre> §7- Renombra a tu dragón activo."
+    recipes: "§a/dragon recipes §7- Muestra las recetas de crafteo."
+    lost: "§a/dragon lost §7- Reporta un huevo de dragón perdido."
+    manage: "§a/managedragons (/md) §7- Abre la GUI principal de gestión de dragones."
+  logs: # Sección para comando /dragonlogs
+    helpTitle: "§e=== Comandos de Registros de Dragón ==="
+    helpList: "§a/dragonlogs list [límite] §7- Muestra registros recientes de huevos perdidos (límite 10)"
+    helpPlayer: "§a/dragonlogs player <nombreJugador|UUID> §7- Muestra registros para un jugador específico"
+    usagePlayer: "§eUso: /dragonlogs player <nombreJugador|UUID>"
+    invalidLimitPositive: "§cEl límite debe ser un número positivo."
+    invalidLimitNumber: "§cNúmero de límite inválido: {0}"
+    playerNotFound: "§cJugador '{0}' no encontrado en línea. Intenta usar su UUID."
+    noRecentLogs: "§eNo se encontraron registros recientes de huevos perdidos."
+    noPlayerLogs: "§eNo se encontraron registros de huevos perdidos para el jugador {0}."
+    headerRecent: "§aRegistros Recientes de Huevos Perdidos (Últimos {0}):"
+    headerPlayer: "§aRegistros de Huevos Perdidos para {0}:"
+    logFormatPlayer: "§7{0} - Jugador: §f{1}§7, ID Huevo: §f{2}§7, Ubicación: §f{3}"
+    logFormatNoPlayer: "§7{0} - ID Huevo: §f{1}§7, Ubicación: §f{2}"
+    notEnoughMoney: "§c¡No tienes suficientes monedas para comprar un huevo de dragón! Precio: §e{0}"
+          - "ID: {0}..."
+          - "Tipo: {1}"
+          - "Comprado: {0}"
+          - ""
+          - "Haz clic para reportar este huevo como perdido"
+    confirmation:
+      title: "Confirmar: Reportar Huevo Perdido"
+      info:
+        name: "¿Reportar {0} como perdido?"
+        lore:
+          - "Tipo: {0}"
+          - "Estado: {1}"
+          - ""
+          - "Advertencia: ¡Esta acción no se puede deshacer!"
+          - "Tu huevo de dragón será eliminado permanentemente."
+          - "Necesitarás comprar un nuevo huevo."
+      locations:
+        overworld: "Perdido en el Mundo Principal"
+        nether: "Perdido en el Nether"
+        end: "Perdido en el End"
+        inventory: "Perdido en mi Inventario"
+        other: "Otra/Ubicación Desconocida"
+        glitch: "Perdido debido a un Error"
+      buttons:
+        cancel:
+          name: "Cancelar"
+          lore:
+            - "Volver al menú anterior"
+            - "sin reportar el huevo como perdido"
+  success:
+    dragonSummoned: "¡Tu dragón ha sido invocado!"
+    dragonDismissed: "Tu dragón ha regresado a su reino."
+    dragonRenamed: "Tu dragón ha sido renombrado a {0}."
+    eggReplaced: "¡Has recibido un huevo de dragón de reemplazo!"
+    incubationStarted: "¡Comenzó la incubación de este huevo!"
+    incubationStopped: "Se detuvo la incubación de este huevo."
+    incubationProgress: "¡Tu huevo de dragón está {0}% incubado!"
+    eggHatched: "¡Tu huevo de dragón ha eclosionado!"
+    eggHatchedType: "¡Es un {0}!"
+    eggPurchased: "¡Has comprado un huevo de dragón por {0} monedas!"
+    eggPurchasedInstructions: "Incúbalo en diferentes entornos para determinar su tipo."
+  
+  egg:
+    status:
+      incubating: "Estado: Incubando"
+      notIncubating: "Estado: No Incubando"
+      hatched: "Estado: Eclosionado"
+    instructions:
+      toStart: "Haz clic derecho mientras agachas para comenzar la incubación"
+      toStop: "Haz clic derecho mientras agachas para detener la incubación"
+      keepInventory: "Mantén en el inventario para continuar la incubación"
+      summon: "Haz clic derecho para invocar a tu dragón" 

@@ -2,31 +2,364 @@ gui:
   mainMenu:
     title: "Dragon Management"
     buttons:
-      customize: "Dragon Customization"
-      customize.lore:
-        - "Change your dragon's appearance"
-        - "and special effects"
-      storage: "Dragon Egg Storage"
-      storage.lore:
-        - "Store and manage your"
-        - "dragon eggs safely"
+      customize:
+        name: "§bDragon Customization" # Added color code for emphasis
+        lore:
+          - "§7Change your active dragon's type"
+          - "§7(Fire, Ice, or Lightning)"
+      storage:
+        name: "§aDragon Egg Storage" # Added color code
+        lore:
+          - "§7Store and retrieve your dragon eggs."
+          - "§7Current eggs: §e{0}§7/§e{1}" # Added color codes
+      buyEgg:
+        name: "§6Buy Dragon Egg" # Added color code
+        lore:
+          - "§7Purchase a new dragon egg."
+          - "§7Price: §e${0}" # Added color code
+          - "§7You have: §e{1}§7/§e{2} §7eggs" # Added color codes
+        max:
+          - "§cYou already have the maximum" # Added color code
+          - "§cnumber of dragon eggs (§e{0}§c)." # Added color code
+      lostEgg:
+        name: "§cReport Lost Egg" # Added color code
+        lore:
+          - "§7If you lost a dragon egg,"
+          - "§7report it here to remove it."
+      help:
+        name: "§eDragon Help" # Added color code
+        lore:
+          - "§7Information about dragons"
+          - "§7and how to use them."
   customization:
     title: "Dragon Customization"
     buttons:
       type:
-        fire: "Fire Dragon"
-        ice: "Ice Dragon"
-        lightning: "Lightning Dragon"
-      effects:
-        flame: "Flame Trail"
-        ice: "Ice Trail"
-        lightning: "Lightning Trail"
-      color:
-        red: "Red Dragon"
-        blue: "Blue Dragon"
-        yellow: "Yellow Dragon"
+        fire: "§cFire Dragon" # Added color code
+        fire_lore:
+          - "§7Click to change your dragon"
+          - "§7into a §cFire Dragon§7."
+        ice: "§bIce Dragon" # Added color code
+        ice_lore:
+          - "§7Click to change your dragon"
+          - "§7into an §bIce Dragon§7."
+        lightning: "§eLightning Dragon" # Added color code
+        lightning_lore:
+          - "§7Click to change your dragon"
+          - "§7into a §eLightning Dragon§7."
+      # Removed effects/color as they might not be implemented or needed based on user request focus
+      back:
+        name: "§fBack" # Added color code
+        lore:
+          - "§7Return to the main menu."
+      default_lore: "§7Click to go back" # Generic lore for default back button
+    next: # New section for next button
+      name: "§aNext"
+      default_lore: "§7Click to go to the next page"
   storage:
     title: "Dragon Egg Storage"
+    buttons:
+      back:
+        name: "§fBack" # Added color code
+        lore:
+          - "§7Return to the main menu."
+      help:
+        name: "§eHelp" # Added color code
+        lore:
+          - "§7Store your dragon eggs safely here."
+          - "§7Maximum §e{0} §7eggs."
+          - "§7Click an egg in the storage to retrieve it."
+          - "§7Click an egg in your inventory to store it." # Clarified action
     messages:
-      saved: "Dragon egg storage saved!"
-      loaded: "Dragon egg storage loaded!" 
+      saved: "§aDragon egg storage saved!" # Added color code
+      loaded: "§aDragon egg storage loaded!" # Added color code
+      stored: "§aDragon egg stored successfully!" # Added message
+      retrieved: "§aDragon egg retrieved successfully!" # Added message
+      storageFull: "§cYour egg storage is full!" # Added message
+      notYourEgg: "§cYou can only store your own dragon eggs!" # Added message
+  purchaseMenu:
+    title: "Dragon Egg Purchase"
+    info:
+      name: "§dDragon Egg" # Added color code
+      lore:
+        - "§7Purchase a new dragon egg."
+        - "§7The dragon's type will be determined"
+        - "§7by how you incubate the egg."
+        - ""
+        - "§7Price: §e{0} §7coins" # Added color code
+    buttons:
+      confirm:
+        name: "§aConfirm Purchase" # Added color code
+        lore:
+          - "§7Click to confirm the purchase"
+          - "§7and receive your new egg."
+      cancel:
+        name: "§cCancel" # Added color code
+        lore:
+          - "§7Click to cancel the purchase"
+          - "§7and return to the main menu."
+
+messages:
+  prefix: "§d[RokiDragon] §f" # Added a standard prefix for chat messages
+  dragonHelp:
+    title: "§e===== Dragon Help =====" # Added color code
+    ownershipLimit: "§7- You can own up to §e{0}§7 dragon eggs at once."
+    incubation: "§7- To incubate an egg, §bShift + Right-Click§7 with it in hand." # Clarified action
+    incubationLimit: "§7- You can only incubate §eone§7 egg at a time."
+    accessDragon: "§7- Once hatched, access your dragon with §a/dragon§7."
+    types: "§7- Eggs hatch into three types: §cFire§7, §bIce§7, and §eLightning§7." # Used color codes
+    abilities: "§7- Each dragon type has special abilities usable while riding."
+    lostEgg: "§7- If you lose an egg, use §a/dragon lost§7 or the GUI."
+    footer: "§e=====================" # Added color code
+  
+  errors:
+    maxEggs: "§cYou already have the maximum number of dragon eggs (§e{0}§c)!"
+    noDragon: "§cYou don't have an active dragon. Hatch an egg first!" # Clarified
+    buyFirst: "§cYou don't have a dragon egg yet. Use §a/dragon buy§c or the GUI to purchase one."
+    notHatched: "§cYour dragon egg hasn't hatched yet! Incubate it first."
+    cooldown: "§cYou must wait §e{0}§c seconds before summoning your dragon again."
+    alreadySummoned: "§cYour dragon is already summoned!"
+    notSummoned: "§cYou don't have a dragon summoned right now."
+    dragonDefeated: "§cYour dragon has been defeated!"
+    lostForever: "§cIt has returned to the void and cannot be summoned again."
+    eggNotBelongToYou: "§cThis dragon egg doesn't belong to you! It's unstable!" # Changed wording
+    eggAlreadyHatched: "§cThis egg has already hatched into a dragon!"
+    oneEggAtATime: "§cYou can only incubate one egg at a time!"
+    needShiftClick: "§cYour dragon egg isn't hatched! Use §bShift + Right-Click§c to toggle incubation." # Clarified action
+    cannotPlaceEgg: "§cDragon eggs cannot be placed! Use §bShift + Right-Click§c to incubate." # Clarified action
+    invalidEgg: "§cThis is not a valid dragon egg!" # Added message
+    corruptedEgg: "§cThis dragon egg seems corrupted or is missing data!" # Added missing key
+    storeFailed: "§cFailed to store the dragon egg in storage." # Added missing key
+    eggNotFoundStorage: "§cCould not find that specific egg in your storage." # Added missing key
+    retrieveFailed: "§cFailed to retrieve the dragon egg from storage." # Added missing key
+    inventoryFull: "§cYour inventory is full!" # Added missing key
+    hatchFailed: "§cFailed to hatch the dragon egg. Something went wrong." # Added missing key
+    eggNotFound: "§cCould not find an egg with that ID." # Added missing key
+    eggRetrievalFailed: "§cFailed to retrieve egg data from storage." # Added missing key
+    notEnoughMoney: "§cYou don't have enough coins to buy a dragon egg! Price: §e{0}" # Added message
+    genericError: "§cAn unexpected error occurred. Please contact an admin." # Renamed from 'generic'
+    playerOnly: "§cThis command can only be used by players."
+    noPermission: "§cYou do not have permission to use this command."
+    noDragonYet: "§cYou don't have a dragon egg yet. Purchase one first!"
+    summonFailed: "§cFailed to summon your dragon. Please try again."
+    nameLength: "§cDragon name must be between {0} and {1} characters long."
+    noPermissionAdmin: "§cYou do not have permission to use this command."
+    worldRestricted: "§cDragons can only be summoned and managed in specific worlds."
+    worldRestrictedWithList: "§cDragons can only be summoned and managed in these worlds: §e{0}"
+    missingShootItem: "§cYou need §e{0}§c to use this ability!" # Added key
+
+  success:
+    dragonSummoned: "§aYour dragon has been summoned!"
+    dragonDismissed: "§aYour dragon has returned to its realm."
+    dragonRenamed: "§aYour dragon has been renamed to §f{0}§a." # Added color code
+    eggReplaced: "§aYou have received a replacement dragon egg!"
+    incubationStarted: "§aStarted incubating this egg! Keep it in your inventory." # Added instruction
+    incubationStopped: "§aStopped incubating this egg."
+    incubationResumed: "§aResumed incubating this egg! Keep it in your inventory." # Added requested key
+    incubationProgress: "§eYour dragon egg is §a{0}%§e incubated!" # Added color codes
+    eggHatched: "§aYour dragon egg has hatched!"
+    eggHatchedType: "§aIt's a {0}§a!" # Placeholder {0} will include color code from Dragon type name
+    eggPurchased: "§aYou purchased a dragon egg for §e{0}§a coins!" # Added color code
+    eggPurchasedInstructions: "§eIncubate it in different environments to determine its type." # Added color code
+    dragonFed: "§aYou fed §f{0}§a a Dragon Loaf. It healed §c{1} HP§a!" # Added color codes
+    eggReportedLost: "§aDragon egg reported as lost and removed." # Added message
+    eggStored: "§aStored egg: {0}" # Added missing key with placeholder for colored name
+    eggRetrieved: "§aRetrieved egg: {0}" # Added missing key with placeholder for colored name
+    initialShards: "§aYou received §e{0} §a{1}§a for your §f{2}§a!" # Added key {0}=count, {1}=shard name+color, {2}=dragon type
+    reportCancelled: "§eEgg report cancelled." # Added message for when reporting is cancelled
+
+  commandUsage:
+    dragonName: "§eUsage: /dragon name <New Name>" # Added color code
+    dragonLogs: "§eUsage: /dragonlogs <list|player> [PlayerName]" # Added color code
+    manageDragons: "§eUsage: /managedragons" # Added usage
+    summonDragon: "§eUsage: /summondragon <buy|hatch|forcehatch|settype|give>" # Added usage
+
+  admin:
+    permissionDenied: "§cYou don't have permission to use this command."
+    playerNotFound: "§cPlayer §e{0}§c not found or not online!" # Added color code
+    noDragonEgg: "§cPlayer §e{0}§c doesn't have a dragon egg!" # Added color code
+    alreadyHatched: "§cPlayer §e{0}§c's dragon has already hatched!" # Added color code
+    eggHatched: "§aYou have hatched §e{0}§a's dragon egg!" # Added color code
+    eggHatchedNotification: "§aYour dragon egg has been hatched by an admin!"
+    gaveEgg: "§aGave a dragon egg to §e{0}§a." # Added message
+    setType: "§aSet §e{0}§a's next dragon type to §f{1}§a." # Added message
+    forceHatched: "§aForce-hatched §e{0}§a's dragon egg." # Added message
+
+  help:
+    title: "§e=== Dragon Commands ===" # Added color code
+    help: "§a/dragon help §7- Shows this list of commands."
+    info: "§a/dragon info §7- Displays info about your active dragon."
+    summon: "§a/dragon summon §7- Summons your hatched dragon."
+    despawn: "§a/dragon despawn §7- Dismisses your summoned dragon."
+    name: "§a/dragon name <Name> §7- Renames your active dragon."
+    recipes: "§a/dragon recipes §7- Shows crafting recipes."
+    lost: "§a/dragon lost §7- Report a lost dragon egg."
+    manage: "§a/managedragons (/md) §7- Opens the main dragon management GUI."
+
+  info:
+    yourDragon: "§eYour dragon: §f{0}" # Added color codes
+    type: "§eType: §f{0}" # Added color codes, {0} will include type color
+    health: "§eHealth: §c{0} §7/ §c{1}" # Added key
+    notSummoned: "§7Dragon is not currently summoned." # Added key
+    dragonFullHealth: "§a{0}§a is already at full health!" # Moved back from info
+    playerOverate: "§eThe Dragon Loaf is incredibly filling... maybe too filling." # Added color code
+    useShiftClickToIncubate: "§eUse §bShift + Right-Click§e to incubate your dragon egg." # Added missing message
+
+  logs: # Section for /dragonlogs command
+    helpTitle: "§e=== Dragon Logs Commands ==="
+    helpList: "§a/dragonlogs list [limit] §7- Show recent lost egg logs (default 10)"
+    helpPlayer: "§a/dragonlogs player <playerName|UUID> §7- Show logs for a specific player"
+    usagePlayer: "§eUsage: /dragonlogs player <playerName|UUID>"
+    invalidLimitPositive: "§cLimit must be a positive number."
+    invalidLimitNumber: "§cInvalid limit number: {0}"
+    playerNotFound: "§cPlayer '{0}' not found online. Try using their UUID."
+    noRecentLogs: "§eNo recent lost egg logs found."
+    noPlayerLogs: "§eNo lost egg logs found for player {0}."
+    headerRecent: "§aRecent Lost Egg Logs (Last {0}):"
+    headerPlayer: "§aLost Egg Logs for {0}:"
+    logFormatPlayer: "§7{0} - Player: §f{1}§7, EggID: §f{2}§7, Location: §f{3}" # Timestamp, PlayerName, EggID, Location
+    logFormatNoPlayer: "§7{0} - EggID: §f{1}§7, Location: §f{2}" # Timestamp, EggID, Location
+    health: "§eHealth: §c{0} §7/ §c{1}" # Moved back from info
+    notSummoned: "§7Dragon is not currently summoned." # Moved back from info
+    dragonFullHealth: "§a{0}§a is already at full health!" # Moved back from info
+    playerOverate: "§eThe Dragon Loaf is incredibly filling... maybe too filling." # Moved back from info
+
+  lostEgg:
+    menu:
+      title: "Lost Dragon Eggs"
+      egg:
+        name: "{0} {1} {2}" # {0} = Type Color, {1} = Status, {2} = Egg ID/Name? Needs check
+        status:
+          hatched: "§a[Hatched]" # Added color code
+          egg: "§e[Egg]" # Added color code
+          active: "§b[Active Dragon]" # Added color code, clarified
+        lore:
+          - "§7ID: §f{0}" # Added color code
+          - "§7Type: §f{1}" # Added color code, {1} will include type color
+          - "§7Purchased: §f{2}" # Added color code, assuming {2} is date/time
+          - ""
+          - "§cClick to report this egg as lost." # Added color code
+    confirmation:
+      title: "Confirm: Report Lost Egg"
+      info:
+        name: "§cReport {0} as Lost?" # Added color code, {0} = Egg Name/ID
+        lore:
+          - "§7Type: §f{0}" # Added color code, {0} = Type Name
+          - "§7Status: §f{1}" # Added color code, {1} = Status Text
+          - ""
+          - "§cWarning: This action cannot be undone!"
+          - "§cYour dragon egg/dragon will be permanently removed."
+          - "§cYou will need to purchase a new egg."
+      locations: # These seem like placeholders for a potential future feature, keeping them simple
+        overworld: "§aOverworld"
+        nether: "§cNether"
+        end: "§5End"
+        inventory: "§eInventory"
+        other: "§7Other/Unknown"
+        glitch: "§dGlitch"
+      buttons:
+        confirm_report: # Added a confirm button section
+          name: "§cConfirm Report Lost"
+          lore:
+            - "§7Click to permanently remove this egg/dragon."
+        cancel:
+          name: "§aCancel" # Added color code
+          lore:
+            - "§7Return to the previous menu"
+            - "§7without reporting the egg as lost."
+
+  egg:
+    name: "§dDragon Egg" # Added color code
+    lore: # Combined status and instructions into lore for the item itself
+      - "{0}" # Placeholder for Status (Incubating/Not Incubating/Hatched)
+      - "{1}" # Placeholder for Instructions (Shift-click/Right-click)
+      - "{2}" # Placeholder for Progress (e.g., Incubated: 50%) or empty
+      - ""
+      - "§7Owner: §f{3}" # Added Owner display
+      - "§7ID: §f{4}" # Added ID display
+    status:
+      incubating: "§eStatus: Incubating" # Added color code
+      notIncubating: "§7Status: Not Incubating" # Added color code
+      hatched: "§aStatus: Hatched" # Added color code
+    instructions:
+      toStart: "§bShift + Right-Click§7 to start incubation." # Clarified action
+      toStop: "§bShift + Right-Click§7 to stop incubation." # Clarified action
+      keepInventory: "§7Keep in inventory to continue incubation."
+      summon: "§aRight-Click§7 to summon your dragon." # Clarified action
+    progressFormat: "§7Incubated: §a{0}%" # Format for progress line
+
+  recipes:
+    title: "§e=== Crafting Recipes ===" # Added color code
+    header: "§7Use a crafting table to create these items:"
+    footer: "§7Right-click while riding your dragon to use shard abilities."
+    separator: "§7--------------------" # Added separator for clarity
+    shard_pattern: "§7Pattern: Place ingredients in a ring with §cTNT§7 in the middle."
+    fire_shard:
+      name: "§cFire Dragon Shard" # Added color code
+      description: "§7Used by §cFire Dragons§7 to shoot fireballs."
+      ingredients: "§7- §cFire Charges§7 (Corners)"
+      ingredients2: "§7- §6Blaze Powder§7 (Sides)" # Added color code
+    ice_shard:
+      name: "§bIce Dragon Shard" # Added color code
+      description: "§7Used by §bIce Dragons§7 to shoot ice balls."
+      ingredients: "§7- §bPacked Ice§7 (Corners)" # Added color code
+      ingredients2: "§7- §fSnowballs§7 (Sides)" # Added color code
+    lightning_shard:
+      name: "§eLightning Dragon Shard" # Added color code
+      description: "§7Used by §eLightning Dragons§7 to shoot lightning."
+      ingredients: "§7- §eGlowstone Dust§7 (Corners)" # Added color code
+      ingredients2: "§7- §cRedstone Blocks§7 (Sides)" # Added color code
+    dragon_loaf: # Updated Dragon Loaf recipe description
+      name: "§6Dragon Loaf" # Added color code
+      description: "§7A nutritious meal to heal your dragon."
+      ingredients: "§7- §fWheat§7 (Top & Bottom Rows)" # Combined wheat lines
+      ingredients2: "§7- Any §cCooked/Raw Beef§7, §fChicken§7, or §bFish§7 (Middle Row, 3x)" # Describe the middle row options
+      ingredients3: "" # Removed third ingredient line
+    # Added section for recipe broadcast messages
+    broadcast:
+      title: "&a&lDragon Shard Recipes Available!"
+      fire: "&cFire Charges &7+ &6Blaze Powder &7+ &cTNT"
+      ice: "&bPacked Ice &7+ &fSnowballs &7+ &cTNT"
+      lightning: "&eGlowstone Dust &7+ &cRedstone Blocks &7+ &cTNT"
+      guide: "&7Use &a/dragon recipes&7 to see details."
+
+# Added section for item names/lores not tied to specific GUI menus
+items:
+  dragon_loaf:
+    name: "§6Dragon Loaf"
+    lore:
+      - "§7A hearty loaf baked with special ingredients."
+      - "§7Feed it to your dragon (§aRight-Click§7 on dragon)"
+      - "§7to restore its health."
+      - ""
+      - "§cWarning: Not recommended for human consumption!"
+  dragon_shard: # Generic lore part for all shards
+    lore_common:
+      - "§7A concentrated essence of dragon power."
+      - "§7Hold this and §aRight-Click§7 while riding"
+      - "§7your dragon to unleash its ability."
+      - "§7Consumes one shard per use."
+      - "§7Craft more using the recipe book."
+
+# Add new shard section
+shard:
+  fire:
+    name: "§c§lFire Dragon Shard"
+    lore:
+      description: "§7A powerful shard infused with fire energy"
+      usage: "§7Used by Fire Dragons to shoot fireballs"
+      effect: "§cCreates a fiery explosion on impact"
+  ice:
+    name: "§b§lIce Dragon Shard"
+    lore:
+      description: "§7A powerful shard infused with ice energy"
+      usage: "§7Used by Ice Dragons to shoot ice balls"
+      effect: "§bFreezes targets on impact"
+  lightning:
+    name: "§e§lLightning Dragon Shard"
+    lore:
+      description: "§7A powerful shard infused with lightning energy"
+      usage: "§7Used by Lightning Dragons to shoot lightning balls"
+      effect: "§eStrikes lightning on impact"
+  lore: # Common lore lines
+    instruction: "§eRight-click while riding to shoot"

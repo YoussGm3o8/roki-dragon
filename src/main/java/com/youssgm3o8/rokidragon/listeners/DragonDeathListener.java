@@ -1,11 +1,11 @@
 package com.youssgm3o8.rokidragon.listeners;
 
+import com.youssgm3o8.rokidragon.dragon.DragonEntity;
+
+import cn.nukkit.Player;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.entity.EntityDeathEvent;
-import com.youssgm3o8.rokidragon.DragonPlugin;
-import com.youssgm3o8.rokidragon.entities.DragonEntity;
-import cn.nukkit.Player;
 
 public class DragonDeathListener implements Listener {
 
@@ -15,9 +15,9 @@ public class DragonDeathListener implements Listener {
             DragonEntity dragon = (DragonEntity) event.getEntity();
             Player owner = dragon.getOwner();
             if (owner != null) {
-                String ownerUUID = owner.getUniqueId().toString();
-                // Only handle database cleanup, message is sent in DragonEntity.handleDeath()
-                DragonPlugin.getInstance().getDatabaseManager().removeDragon(ownerUUID);
+                // Database removal is now handled within DragonEntity.handleDeath()
+                // String ownerUUID = owner.getUniqueId().toString();
+                // DragonPlugin.getInstance().getDatabaseManager().removeDragon(ownerUUID);
             }
         }
     }

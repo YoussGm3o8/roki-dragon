@@ -3,23 +3,15 @@ main: com.youssgm3o8.rokidragon.DragonPlugin
 version: 1.0.0
 api: ["1.0.0"]
 author: YoussGm3o8
+description: A plugin that adds tameable dragons to Nukkit servers
+# depend: [DbLib] # Removed dependency
 
-commands:
-  dragonmanage:
-    description: Open the dragon management GUI
-    usage: /dragonmanage
-    aliases: [dm, dragongui]
-    permission: rokidragon.command.manage
-  summondragon:
-    description: Summon your dragon
-    usage: /summondragon [buy|lost|admin <player>]
-    aliases: [dragon, drg]
-    permission: rokidragon.command.summon
+# Commands are now registered programmatically in DragonPlugin.java
 
 permissions:
-  rokidragon.command.manage:
-    description: Allows using the dragon management command
+  rokidragon.use:
+    description: Allows using basic dragon commands
     default: true
-  rokidragon.command.summon:
-    description: Allows summoning a dragon
-    default: true
+  rokidragon.admin:
+    description: Allows using admin dragon commands
+    default: op

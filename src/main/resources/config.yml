@@ -1,23 +1,77 @@
-# Language settings
+# RokiDragon Configuration File
+# -----------------------------
+# Configure various aspects of the RokiDragon plugin.
+
+# Language settings for plugin messages
 language:
-  default: "en_US"  # Default language to use
-  fallback: "en_US" # Fallback language if selected language file is missing
+  default: "en_US"  # Default language file to load from the 'lang' folder (e.g., en_US.yml)
+  fallback: "en_US" # Fallback language if the default file is missing or invalid
 
-dragon-egg-price: 128000
-dragon-hatching-time: 3600 # Hatching time in seconds (default: 1 hour)
-dragon-buy-cooldown: 60 # Cooldown in seconds between purchases (default: 60 seconds)
-dragon-fireball-cooldown: 500 # Cooldown in milliseconds between fireballs (default: 500ms)
-dragon-respawn-time: 900 # Time in seconds before dragon can be respawned after death (default: 15 minutes)
+# Economy related settings
+economy:
+  dragon_egg_price: 128000 # Cost to purchase a dragon egg via the GUI/command
 
-# Dragon stats
-dragon:
-  max-health: 100 # Maximum health points (integer)
-  base-damage: 15.0 # Base damage dealt by attacks
-  damage-reduction: 0.25 # Damage reduction multiplier (0.25 = 75% damage reduction)
+# Timing and Cooldown settings
+timing:
+  # Egg incubation settings
+  eggs:
+    incubation_time_seconds: 3600 # Time in seconds for an egg to hatch while incubating (Default: 3600 = 1 hour)
 
-# Fireball settings
-fireball:
-  explosion-radius: 3.0 # Size of the explosion (default: 3.0)
-  set-fire: true # Whether fireballs should set blocks on fire
-  fire-trail: true # Whether fireballs should have particle trail effects
-  fire-chance: 0.3333 # Chance for blocks to catch fire (0.0 to 1.0)
+  # Cooldowns for various actions
+  cooldowns:
+    buy_seconds: 60          # Cooldown in seconds between purchasing eggs (Default: 60)
+    respawn_seconds: 900     # Cooldown in seconds before a dragon can be summoned after death (Default: 900 = 15 minutes)
+    ability_milliseconds: 2000 # Cooldown in milliseconds between using dragon abilities (e.g., fireball) (Default: 500) - INCREASED TO 2 SECONDS
+    summon_seconds: 30       # Cooldown in seconds after summoning a dragon before it can be used again (Default: 30)
+
+# World restrictions
+world_restrictions:
+  enabled: true              # Set to false to disable world restrictions entirely
+  allowed_worlds:            # List of worlds where dragon commands and features can be used
+    - "world"                # Default world name (usually "world" in Nukkit)
+    # Add more world names as needed
+
+# Dragon entity base statistics
+dragon_stats:
+  max_health: 100         # Maximum health points (integer, Default: 100)
+  base_damage: 15.0       # Base damage dealt by attacks (Default: 15.0) - Currently not implemented
+  damage_reduction: 0.25  # Damage reduction multiplier (0.0 = no reduction, 1.0 = full immunity, Default: 0.25 = 75% reduction)
+  move_speed: 1.8         # Base movement speed (Default: 1.8)
+  ice_dragon_fire_vulnerability: 1.5 # Damage multiplier for Ice Dragons taking fire/lava damage (Default: 1.5 = 50% extra damage)
+  # move_speed: 1.8       # Base movement speed (Default: 1.8) - Consider making configurable
+
+# Settings for specific dragon abilities
+abilities:
+  # Fireball ability (used by Fire Dragon)
+  fireball:
+    explosion_radius: 3.0 # Size of the explosion (Default: 3.0)
+    set_fire: true        # Whether fireballs should set blocks on fire (Default: true)
+    fire_chance: 0.3333   # Chance for blocks to catch fire (0.0 to 1.0, Default: 0.3333)
+    # fire_trail: true    # Whether fireballs should have particle trail effects (Default: true) - Consider making configurable
+
+  # Iceball ability (used by Ice Dragon)
+  iceball:
+    freeze_duration_ticks: 100 # Duration of slowness effect in ticks (20 ticks = 1 second, Default: 100 = 5 seconds)
+    freeze_amplifier: 1      # Amplifier for slowness effect (0 = Slowness I, 1 = Slowness II, etc., Default: 1)
+    snow_radius: 3           # Radius for placing snow layers on impact (Default: 3)
+    snow_chance: 0.7         # Chance to place snow layer on valid blocks (0.0 to 1.0, Default: 0.7)
+
+  # Lightning Ball ability (used by Lightning Dragon)
+  lightning_ball:
+    explosion_radius: 1.2 # Size of the explosion (Default: 1.2)
+    # summon_lightning: true # Whether to summon actual lightning on impact (Default: true) - Consider making configurable
+
+  # Item required to use dragon abilities (Format: "minecraft:item_id" or just "item_id")
+  required_shoot_item:
+    fire: "minecraft:fire_charge" # Default: Fire Charge
+    ice: "minecraft:snowball"     # Default: Snowball
+    lightning: "minecraft:glowstone_dust" # Default: Glowstone Dust
+
+# Dragon Naming Rules
+naming:
+  min_length: 3 # Minimum allowed length for a dragon's name (Default: 3)
+  max_length: 16 # Maximum allowed length for a dragon's name (Default: 16)
+
+# GUI Settings (Example - Add more as needed)
+gui:
+  storage_size: 5 # Maximum number of eggs a player can store in the management GUI (Default: 5)

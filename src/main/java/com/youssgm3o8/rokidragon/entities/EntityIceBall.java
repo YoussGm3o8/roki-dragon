@@ -1,16 +1,16 @@
 package com.youssgm3o8.rokidragon.entities;
 
-import cn.nukkit.level.format.FullChunk;
-import cn.nukkit.nbt.tag.CompoundTag;
-import cn.nukkit.entity.Entity;
-import cn.nukkit.event.entity.EntityExplosionPrimeEvent;
-import cn.nukkit.level.GameRule;
-import cn.nukkit.level.particle.GenericParticle;
-import cn.nukkit.block.Block;
-import cn.nukkit.entity.projectile.EntitySnowball;
-import cn.nukkit.potion.Effect;
-import cn.nukkit.math.Vector3;
 import java.util.concurrent.ThreadLocalRandom;
+
+import cn.nukkit.block.Block;
+import cn.nukkit.entity.Entity;
+import cn.nukkit.entity.projectile.EntitySnowball;
+import cn.nukkit.event.entity.EntityExplosionPrimeEvent;
+import cn.nukkit.level.format.FullChunk;
+import cn.nukkit.level.particle.GenericParticle;
+import cn.nukkit.math.Vector3;
+import cn.nukkit.nbt.tag.CompoundTag;
+import cn.nukkit.potion.Effect;
 
 public class EntityIceBall extends EntitySnowball {
     private Entity shootingEntity;
