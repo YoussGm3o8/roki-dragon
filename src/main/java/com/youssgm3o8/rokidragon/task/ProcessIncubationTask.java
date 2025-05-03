@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.data.IncubatingEgg;
+import com.youssgm3o8.rokidragon.util.DragonUtils;
 
 import cn.nukkit.Player;
 import cn.nukkit.item.Item;
@@ -297,7 +298,7 @@ public class ProcessIncubationTask extends Task {
         
         // Determine dragon type based on environment
         String dragonType = determineDragonType(player);
-        String dragonName = egg.getDragonName();
+        String dragonName = egg.getDragonName(); // This should be the default "Dragon"
         
         // Mark egg as hatched in database
         plugin.getDatabaseManager().setEggHatched(eggId, true);
@@ -308,22 +309,29 @@ public class ProcessIncubationTask extends Task {
         // Stop incubation
         plugin.getDatabaseManager().setEggIncubating(eggId, false);
         
-        // Send message to player
+        // Send hatching message to player
         player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatched"));
-        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatchedType", dragonType));
+        
+        // Include color in the type name for the message
+        String coloredDragonType = DragonUtils.getColorByType(dragonType) + dragonType + TextFormat.RESET; 
+        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatchedType", coloredDragonType));
         
         // Update egg in player's inventory
         updateEggInInventory(player, eggId, dragonType, dragonName);
         
-        // Register the hatched dragon in the system
+        // Register the hatched dragon in the system (ensures DB record exists)
         String playerUUID = player.getUniqueId().toString();
         boolean registered = plugin.getDatabaseManager().registerDragon(playerUUID, eggId, dragonType, dragonName);
         
         if (registered) {
             plugin.getLogger().info("Successfully registered hatched dragon " + dragonName + " (" + dragonType + ") for player " + player.getName());
             
-            // Give initial dragon shards based on dragon type
-            plugin.getShardManager().giveInitialShards(dragonType, player);
+            // Reverted: No name check or conditional form opening here.
+            // The naming form logic is moved to the summoning interaction.
+
+            // Reverted: Shards are handled after successful naming or during summon if already named.
+            // plugin.getShardManager().giveInitialShards(dragonType, player);
+
         } else {
             plugin.getLogger().warning("Failed to register hatched dragon for player " + player.getName());
         }
@@ -337,6 +345,17 @@ public class ProcessIncubationTask extends Task {
      */
     private String determineDragonType(Player player) {
         Level level = player.getLevel();
+        
+        // Check weather conditions first
+        if (level.isRaining()) {
+            if (level.isThundering()) {
+                plugin.getLogger().info("Thunderstorm detected, setting dragon type to Lightning Dragon");
+                return "Lightning Dragon";
+            } else {
+                plugin.getLogger().info("Rain detected, setting dragon type to Water Dragon");
+                return "Water Dragon";
+            }
+        }
         
         // Check if it's night time (for Lightning Dragon)
         // Minecraft time is 0-24000, with night being roughly 13000-23000
@@ -357,11 +376,51 @@ public class ProcessIncubationTask extends Task {
         int y = position.getFloorY();
         int z = position.getFloorZ();
         
-        // Check if player is underwater (for Ice Dragon)
+        // Check if player is underwater (for Water Dragon)
         Block block = level.getBlock(position);
         if (block.getId() == Block.WATER || block.getId() == Block.STILL_WATER) {
-            plugin.getLogger().info("Player is underwater, setting dragon type to Ice Dragon");
-            return "Ice Dragon";
+            plugin.getLogger().info("Player is underwater, setting dragon type to Water Dragon");
+            return "Water Dragon";
+        }
+        
+        // Check for Earth Dragon criteria
+        boolean isEarthBiome = false;
+        
+        // Check for tall grass or if surrounded by dirt/stone
+        int checkRadius = 3;
+        int dirtCount = 0;
+        int stoneCount = 0;
+        int grassCount = 0;
+        
+        for(int xOffset = -checkRadius; xOffset <= checkRadius; xOffset++) {
+            for(int zOffset = -checkRadius; zOffset <= checkRadius; zOffset++) {
+                // Check for tall grass at player position or nearby
+                Block grassBlock = level.getBlock(x + xOffset, y, z + zOffset);
+                Block belowBlock = level.getBlock(x + xOffset, y - 1, z + zOffset);
+                
+                if(grassBlock.getId() == Block.TALL_GRASS) {
+                    grassCount++;
+                }
+                
+                // Check for dirt and stone around
+                if(belowBlock.getId() == Block.DIRT || belowBlock.getId() == Block.GRASS) {
+                    dirtCount++;
+                }
+                
+                if(belowBlock.getId() == Block.STONE) {
+                    stoneCount++;
+                }
+            }
+        }
+        
+        // If player is standing on dirt/grass with tall grass nearby, or is surrounded by stone
+        if(grassCount >= 3 || dirtCount >= 5 || stoneCount >= 5) {
+            plugin.getLogger().info("Player is in an earth-like area, setting dragon type to Earth Dragon");
+            isEarthBiome = true;
+        }
+        
+        if(isEarthBiome) {
+            return "Earth Dragon";
         }
         
         // Check biome (for Ice Dragon or Fire Dragon)
@@ -370,7 +429,6 @@ public class ProcessIncubationTask extends Task {
         boolean isDesertBiome = false;
         
         // Check for snow/ice blocks nearby
-        int checkRadius = 3;
         for(int xOffset = -checkRadius; xOffset <= checkRadius; xOffset++) {
             for(int zOffset = -checkRadius; zOffset <= checkRadius; zOffset++) {
                 Block surfaceBlock = level.getBlock(x + xOffset, y, z + zOffset);

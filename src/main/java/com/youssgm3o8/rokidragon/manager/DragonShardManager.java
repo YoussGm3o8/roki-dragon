@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.gui.FormBasedDragonGUI;
+import com.youssgm3o8.rokidragon.util.DragonUtils;
 
 import cn.nukkit.Player;
 import cn.nukkit.inventory.ShapedRecipe;
@@ -26,6 +27,8 @@ public class DragonShardManager {
     public static final int FIRE_SHARD_ID = Item.FIRE_CHARGE;
     public static final int ICE_SHARD_ID = Item.PRISMARINE_SHARD;
     public static final int LIGHTNING_SHARD_ID = Item.GHAST_TEAR;
+    public static final int WATER_SHARD_ID = Item.PRISMARINE_CRYSTALS;
+    public static final int EARTH_SHARD_ID = Item.CLAY_BALL;
 
     /**
      * Constructs a new DragonShardManager.
@@ -58,23 +61,26 @@ public class DragonShardManager {
     public Item createFireShard() {
         Item shard = Item.get(FIRE_SHARD_ID);
         String name = TextFormat.RED + plugin.getLanguageString("shard.fire.name"); // Use lang key
-        shard.setCustomName(name);
         
         // Create lore list
         ArrayList<String> lore = new ArrayList<>();
         lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.fire.lore.description")); // Use lang key
-        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.fire.lore.usage")); // Use lang key
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.fire.lore.usage", "Fire Dragon")); // Use lang key with dragon type
         lore.add("");
         lore.add(TextFormat.YELLOW + plugin.getLanguageString("shard.lore.instruction")); // Use lang key
         lore.add(TextFormat.RED + plugin.getLanguageString("shard.fire.lore.effect")); // Use lang key
         
+        // Set name and lore BEFORE adding NBT data
+        shard.setCustomName(name);
+        shard.setLore(lore.toArray(new String[0]));
+        
+        // Now apply NBT data
         CompoundTag tag = new CompoundTag()
             .putString("DragonShardType", "fire")
             .putBoolean("IsDragonShard", true)
             .putString("ShardId", UUID.randomUUID().toString());
             
         shard.setNamedTag(tag);
-        shard.setLore(lore.toArray(new String[0]));
         return shard;
     }
 
@@ -85,23 +91,26 @@ public class DragonShardManager {
     public Item createIceShard() {
         Item shard = Item.get(ICE_SHARD_ID);
         String name = TextFormat.AQUA + plugin.getLanguageString("shard.ice.name"); // Use lang key
-        shard.setCustomName(name);
         
         // Create lore list
         ArrayList<String> lore = new ArrayList<>();
         lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.ice.lore.description")); // Use lang key
-        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.ice.lore.usage")); // Use lang key
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.ice.lore.usage", "Ice Dragon")); // Use lang key with dragon type
         lore.add("");
         lore.add(TextFormat.YELLOW + plugin.getLanguageString("shard.lore.instruction")); // Use lang key
         lore.add(TextFormat.AQUA + plugin.getLanguageString("shard.ice.lore.effect")); // Use lang key
         
+        // Set name and lore BEFORE adding NBT data
+        shard.setCustomName(name);
+        shard.setLore(lore.toArray(new String[0]));
+        
+        // Now apply NBT data
         CompoundTag tag = new CompoundTag()
             .putString("DragonShardType", "ice")
             .putBoolean("IsDragonShard", true)
             .putString("ShardId", UUID.randomUUID().toString());
             
         shard.setNamedTag(tag);
-        shard.setLore(lore.toArray(new String[0]));
         return shard;
     }
 
@@ -112,23 +121,86 @@ public class DragonShardManager {
     public Item createLightningShard() {
         Item shard = Item.get(LIGHTNING_SHARD_ID);
         String name = TextFormat.YELLOW + plugin.getLanguageString("shard.lightning.name"); // Use lang key
-        shard.setCustomName(name);
         
         // Create lore list
         ArrayList<String> lore = new ArrayList<>();
         lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.lightning.lore.description")); // Use lang key
-        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.lightning.lore.usage")); // Use lang key
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.lightning.lore.usage", "Lightning Dragon")); // Use lang key with dragon type
         lore.add("");
         lore.add(TextFormat.YELLOW + plugin.getLanguageString("shard.lore.instruction")); // Use lang key
         lore.add(TextFormat.GOLD + plugin.getLanguageString("shard.lightning.lore.effect")); // Use lang key
         
+        // Set name and lore BEFORE adding NBT data
+        shard.setCustomName(name);
+        shard.setLore(lore.toArray(new String[0]));
+        
+        // Now apply NBT data
         CompoundTag tag = new CompoundTag()
             .putString("DragonShardType", "lightning")
             .putBoolean("IsDragonShard", true)
             .putString("ShardId", UUID.randomUUID().toString());
             
         shard.setNamedTag(tag);
+        return shard;
+    }
+
+    /**
+     * Creates a Water Dragon Shard item with custom NBT data, name, and lore.
+     * @return The created Water Shard Item.
+     */
+    public Item createWaterShard() {
+        Item shard = Item.get(WATER_SHARD_ID);
+        String name = TextFormat.BLUE + plugin.getLanguageString("shard.water.name");
+        
+        // Create lore list
+        ArrayList<String> lore = new ArrayList<>();
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.water.lore.description"));
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.water.lore.usage", "Water Dragon"));
+        lore.add("");
+        lore.add(TextFormat.YELLOW + plugin.getLanguageString("shard.lore.instruction"));
+        lore.add(TextFormat.BLUE + plugin.getLanguageString("shard.water.lore.effect"));
+        
+        // Set name and lore BEFORE adding NBT data
+        shard.setCustomName(name);
         shard.setLore(lore.toArray(new String[0]));
+        
+        // Now apply NBT data
+        CompoundTag tag = new CompoundTag()
+            .putString("DragonShardType", "water")
+            .putBoolean("IsDragonShard", true)
+            .putString("ShardId", UUID.randomUUID().toString());
+            
+        shard.setNamedTag(tag);
+        return shard;
+    }
+
+    /**
+     * Creates an Earth Dragon Shard item with custom NBT data, name, and lore.
+     * @return The created Earth Shard Item.
+     */
+    public Item createEarthShard() {
+        Item shard = Item.get(EARTH_SHARD_ID);
+        String name = TextFormat.GREEN + plugin.getLanguageString("shard.earth.name");
+        
+        // Create lore list
+        ArrayList<String> lore = new ArrayList<>();
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.earth.lore.description"));
+        lore.add(TextFormat.GRAY + plugin.getLanguageString("shard.earth.lore.usage", "Earth Dragon"));
+        lore.add("");
+        lore.add(TextFormat.YELLOW + plugin.getLanguageString("shard.lore.instruction"));
+        lore.add(TextFormat.GREEN + plugin.getLanguageString("shard.earth.lore.effect"));
+        
+        // Set name and lore BEFORE adding NBT data
+        shard.setCustomName(name);
+        shard.setLore(lore.toArray(new String[0]));
+        
+        // Now apply NBT data
+        CompoundTag tag = new CompoundTag()
+            .putString("DragonShardType", "earth")
+            .putBoolean("IsDragonShard", true)
+            .putString("ShardId", UUID.randomUUID().toString());
+            
+        shard.setNamedTag(tag);
         return shard;
     }
 
@@ -188,6 +260,38 @@ public class DragonShardManager {
             ShapedRecipe lightningRecipe = new ShapedRecipe(lightningShard, lightningShape, lightningIngredients, new ArrayList<>());
             plugin.getServer().getCraftingManager().registerRecipe(lightningRecipe);
             
+            // Water Dragon Shard Recipe
+            Item waterShard = createWaterShard();
+            String[] waterShape = {
+                "PLP",
+                "LTL",
+                "PLP"
+            };
+            Map<Character, Item> waterIngredients = new HashMap<>();
+            waterIngredients.put('T', Item.get(Item.TNT));
+            waterIngredients.put('L', Item.get(Item.BUCKET, 8)); // Bucket with water data value
+            waterIngredients.put('P', Item.get(Item.PRISMARINE_CRYSTALS));
+            
+            // Create Water Shard recipe
+            ShapedRecipe waterRecipe = new ShapedRecipe(waterShard, waterShape, waterIngredients, new ArrayList<>());
+            plugin.getServer().getCraftingManager().registerRecipe(waterRecipe);
+            
+            // Earth Dragon Shard Recipe
+            Item earthShard = createEarthShard();
+            String[] earthShape = {
+                "CEC",
+                "ETE",
+                "CEC"
+            };
+            Map<Character, Item> earthIngredients = new HashMap<>();
+            earthIngredients.put('T', Item.get(Item.TNT));
+            earthIngredients.put('E', Item.get(Item.DIRT));
+            earthIngredients.put('C', Item.get(Item.CLAY_BALL));
+            
+            // Create Earth Shard recipe
+            ShapedRecipe earthRecipe = new ShapedRecipe(earthShard, earthShape, earthIngredients, new ArrayList<>());
+            plugin.getServer().getCraftingManager().registerRecipe(earthRecipe);
+            
             // Rebuild the crafting data packet to ensure clients receive the recipes
             plugin.getServer().getCraftingManager().rebuildPacket();
             
@@ -241,96 +345,134 @@ public class DragonShardManager {
     }
 
     /**
-     * Checks if a given item is the correct type of Dragon Shard for a specific dragon type.
-     * Verifies item ID and the 'DragonShardType' NBT tag.
-     *
-     * @param item       The item to check.
-     * @param dragonType The type of the dragon (e.g., "Fire Dragon").
-     * @return {@code true} if the item is the valid shard for the dragon type, {@code false} otherwise.
+     * Checks if the provided item is a valid shard for the specified dragon type.
+     * @param item The item to check.
+     * @param dragonType The type of dragon.
+     * @return {@code true} if the item is a valid shard for the dragon type, {@code false} otherwise.
      */
     public boolean isValidShardForDragon(Item item, String dragonType) {
-        if (item == null || !item.hasCompoundTag() || !item.getNamedTag().getBoolean("IsDragonShard")) { // Added null check
+        if (item == null || !item.hasCompoundTag() || !dragonType.contains("Dragon")) {
             return false;
         }
-
-        String shardType = item.getNamedTag().getString("DragonShardType");
-        switch (dragonType) {
-            case "Fire Dragon":
-                return item.getId() == FIRE_SHARD_ID && "fire".equals(shardType);
-            case "Ice Dragon":
-                return item.getId() == ICE_SHARD_ID && "ice".equals(shardType);
-            case "Lightning Dragon":
-                return item.getId() == LIGHTNING_SHARD_ID && "lightning".equals(shardType);
-            default:
-                return false;
+        
+        CompoundTag tag = item.getNamedTag();
+        if (!tag.getBoolean("IsDragonShard")) {
+            return false;
         }
+        
+        String shardType = tag.getString("DragonShardType").toLowerCase();
+        String dragonTypeKey = dragonType.split(" ")[0].toLowerCase(); // Extract first word
+        
+        // Match shard type to dragon type (e.g., "fire" shard for "Fire Dragon")
+        return shardType.equals(dragonTypeKey);
     }
 
     /**
-     * Gives a player an initial stack of the appropriate Dragon Shards when their dragon hatches
-     * or potentially when they change dragon type.
-     *
-     * @param dragonType The type of the dragon.
-     * @param player     The player to give the shards to.
+     * Gives the player initial shards based on their dragon type when a dragon is first obtained.
+     * @param dragonType The type of dragon.
+     * @param player The player to give shards to.
      */
     public void giveInitialShards(String dragonType, Player player) {
-        Item shard;
+        // Check if this player already has this dragon type in metadata
+        // to avoid giving shards multiple times
+        String playerUUID = player.getUniqueId().toString();
+        
+        String metaKey = "gave_shards_" + dragonType.toLowerCase().replace(" ", "_");
+        plugin.getLogger().info("[ShardManager] Checking if player " + player.getName() + 
+                              " already has metadata key '" + metaKey + "' for " + dragonType);
+        
+        if (plugin.getDatabaseManager().hasPlayerMetadata(playerUUID, metaKey)) {
+            plugin.getLogger().info("[ShardManager] Player " + player.getName() + 
+                                  " already received initial shards for " + dragonType + 
+                                  " (found metadata key '" + metaKey + "')");
+            return;
+        }
+        
+        plugin.getLogger().info("[ShardManager] Player " + player.getName() + 
+                              " has not received shards for " + dragonType + " yet, giving initial shards");
+        
+        // Create the appropriate shards based on dragon type
+        Item[] shards;
+        String coloredTypeName;
+        
         switch (dragonType) {
             case "Fire Dragon":
-                shard = createFireShard();
+                shards = new Item[]{createFireShard(), createFireShard(), createFireShard()};
+                coloredTypeName = TextFormat.RED + dragonType;
                 break;
             case "Ice Dragon":
-                shard = createIceShard();
+                shards = new Item[]{createIceShard(), createIceShard(), createIceShard()};
+                coloredTypeName = TextFormat.AQUA + dragonType;
                 break;
             case "Lightning Dragon":
-                shard = createLightningShard();
+                shards = new Item[]{createLightningShard(), createLightningShard(), createLightningShard()};
+                coloredTypeName = TextFormat.YELLOW + dragonType;
+                break;
+            case "Water Dragon":
+                shards = new Item[]{createWaterShard(), createWaterShard(), createWaterShard()};
+                coloredTypeName = TextFormat.BLUE + dragonType;
+                break;
+            case "Earth Dragon":
+                shards = new Item[]{createEarthShard(), createEarthShard(), createEarthShard()};
+                coloredTypeName = TextFormat.GREEN + dragonType;
                 break;
             default:
-                plugin.getLogger().warning("Attempted to give initial shards for unknown dragon type: " + dragonType);
+                plugin.getLogger().warning("[ShardManager] Unknown dragon type for shards: " + dragonType);
                 return;
         }
         
-        shard.setCount(10); // Consider making this configurable
-        player.getInventory().addItem(shard);
-        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.initialShards", 10, shard.getCustomName() + TextFormat.GREEN, dragonType)); // Use lang key
+        int shardCount = 10; // Consider making this configurable
+        for (Item shard : shards) {
+            shard.setCount(shardCount);
+            player.getInventory().addItem(shard);
+        }
+        
+        // Send the message using the correct arguments
+        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.initialShards", shardCount, coloredTypeName, coloredTypeName));
+        
+        // Mark that this player has received initial shards for this dragon type
+        plugin.getDatabaseManager().setPlayerMetadata(playerUUID, metaKey, "true");
+        plugin.getLogger().info("[ShardManager] Set metadata key '" + metaKey + "' for player " + 
+                              player.getName() + " to mark shards as given");
     }
 
     /**
-     * Consumes one shard of the appropriate type from the player's inventory.
-     * Used when a dragon uses its shooting ability.
-     *
-     * @param player     The player whose inventory to consume from.
-     * @param dragonType The type of the dragon, determining which shard type is required.
-     * @return {@code true} if a shard was successfully found and consumed, {@code false} otherwise.
+     * Consumes a dragon shard from the player's inventory.
+     * @param player The player to consume the shard from.
+     * @param dragonType The type of dragon.
+     * @return {@code true} if a shard was consumed, {@code false} otherwise.
      */
     public boolean consumeShard(Player player, String dragonType) {
-        int requiredShardId;
-        String requiredShardType;
+        if (player == null || dragonType == null) return false;
+        
+        int shardId;
         
         switch (dragonType) {
             case "Fire Dragon":
-                requiredShardId = FIRE_SHARD_ID;
-                requiredShardType = "fire";
+                shardId = FIRE_SHARD_ID;
                 break;
             case "Ice Dragon":
-                requiredShardId = ICE_SHARD_ID;
-                requiredShardType = "ice";
+                shardId = ICE_SHARD_ID;
                 break;
             case "Lightning Dragon":
-                requiredShardId = LIGHTNING_SHARD_ID;
-                requiredShardType = "lightning";
+                shardId = LIGHTNING_SHARD_ID;
+                break;
+            case "Water Dragon":
+                shardId = WATER_SHARD_ID;
+                break;
+            case "Earth Dragon":
+                shardId = EARTH_SHARD_ID;
                 break;
             default:
-                return false;
+                return false; // Unknown dragon type
         }
 
         for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
             Item item = player.getInventory().getItem(slot);
             // Check if item is the correct type and is a valid dragon shard
-            if (item != null && item.getId() == requiredShardId && 
+            if (item != null && item.getId() == shardId && 
                 item.hasCompoundTag() && 
-                item.getNamedTag().getBoolean("IsDragonShard") && 
-                requiredShardType.equals(item.getNamedTag().getString("DragonShardType"))) {
+                item.getNamedTag().getBoolean("IsDragonShard")) {
                 
                 if (item.getCount() > 1) {
                     item.setCount(item.getCount() - 1);

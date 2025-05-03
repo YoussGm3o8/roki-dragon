@@ -28,7 +28,7 @@ import java.util.UUID;
 public class DragonEggListener implements Listener {
     private final DragonPlugin plugin;
     private final HashMap<UUID, Long> lastInteract = new HashMap<>();
-    private static final long INTERACTION_COOLDOWN = 1000; // 1 second cooldown
+    private static final long INTERACTION_COOLDOWN = 200; // 200ms cooldown
 
     public DragonEggListener(DragonPlugin plugin) {
         this.plugin = plugin;
@@ -46,8 +46,8 @@ public class DragonEggListener implements Listener {
              item.getNamedTag().getBoolean("IsDragonEgg"))) {
             
             event.setCancelled(true);
-            
             Player player = event.getPlayer();
+            // Revert: Send original message directly
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.cannotPlaceEgg"));
         }
     }
@@ -219,6 +219,34 @@ public class DragonEggListener implements Listener {
      * Handle regular egg interaction (right-click without shift)
      */
     private void handleEggInteraction(Player player, String eggId, boolean isHatched) {
+        // First check if the dragon is dead
+        boolean isDead = plugin.getDatabaseManager().isDragonDead(eggId);
+        
+        if (isDead) {
+            // Get the dragon's name
+            String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
+            if (dragonName == null || dragonName.isEmpty()) {
+                dragonName = "Your dragon";
+            }
+            
+            // Get death information
+            Map<String, Object> deathInfo = plugin.getDatabaseManager().getDragonDeathInfo(eggId);
+            String killedBy = "Unknown";
+            if (deathInfo != null && deathInfo.containsKey("killedBy")) {
+                killedBy = (String) deathInfo.get("killedBy");
+            }
+            
+            // Send death message
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.egg.dragonDeathMessage", 
+                TextFormat.BOLD + dragonName + TextFormat.RESET + TextFormat.RED,
+                killedBy));
+            
+            // Add message about not counting toward limit
+            player.sendMessage(TextFormat.GREEN + "This deceased dragon does not count toward your dragon limit.");
+            
+            return; // Don't proceed with summoning
+        }
+        
         if (isHatched) {
             // Summon or despawn dragon
             if (plugin.hasActiveDragon(player)) {
@@ -228,7 +256,7 @@ public class DragonEggListener implements Listener {
                 summonDragon(player);
             }
         } else {
-            // Inform player to use shift-right-click
+            // Revert: Original logic - Inform player to use shift-right-click
             player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.errors.needShiftClick"));
         }
     }

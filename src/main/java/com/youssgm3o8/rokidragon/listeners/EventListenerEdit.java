@@ -2,6 +2,7 @@ package com.youssgm3o8.rokidragon.listeners; // Updated package
 
 import java.text.MessageFormat;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
@@ -24,6 +25,7 @@ import cn.nukkit.item.Item;
 import cn.nukkit.network.protocol.PlayerAuthInputPacket;
 import cn.nukkit.potion.Effect; // Added import
 import cn.nukkit.utils.TextFormat;
+import cn.nukkit.nbt.tag.CompoundTag;
 
 /**
  * Event listener for player-dragon interactions and core mechanics
@@ -69,51 +71,43 @@ public class EventListenerEdit implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_AIR && 
-            event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) {
-            return;
-        }
-        
-        Player player = event.getPlayer();
-        Item item = event.getItem(); // Get item once
-        
-        // Handle Shard Usage while Riding
-        if (player.riding instanceof DragonEntity) {
-            // Use ShardManager to check if it's a valid shard
-            if (plugin.getShardManager().isValidShardForDragon(item, ((DragonEntity) player.riding).getDragonType())) {
-                event.setCancelled(true);
-                DragonEntity dragon = (DragonEntity) player.riding;
-                dragon.shoot(); // Assumes shoot() handles shard consumption
-                return; // Interaction handled, exit
-            }
-        }
-
-        // Handle Dragon Egg Interactions
-        if (eggManager.isDragonEgg(item)) {
-            event.setCancelled(true); // Always cancel placement/default use
-
-            // Apply interaction cooldown
-            UUID playerUUID = player.getUniqueId();
+        if (event.getAction() == PlayerInteractEvent.Action.RIGHT_CLICK_AIR || event.getAction() == PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) {
+            Item item = event.getItem();
+            Player player = event.getPlayer();
+            
+            // Add cooldown to prevent spam clicking
             long currentTime = System.currentTimeMillis();
+            UUID playerUUID = player.getUniqueId();
             if (lastInteract.containsKey(playerUUID) && currentTime - lastInteract.get(playerUUID) < INTERACTION_COOLDOWN) {
-                return; // Still on cooldown
+                // Still on cooldown, ignore this interaction
+                return;
             }
             lastInteract.put(playerUUID, currentTime);
-
-            // Get egg data
-            UUID eggUUID = eggManager.getDragonUUID(item);
-            if (eggUUID == null) {
-                player.sendMessage("§c" + plugin.getLanguageString("messages.errors.corruptedEgg"));
-                return; // Corrupted egg
+            
+            // Check if this is a dragon egg
+            if (!eggManager.isDragonEgg(item)) {
+                return;
             }
-            String eggId = eggUUID.toString();
-            String playerUuidString = playerUUID.toString();
-
-            // Ensure the egg belongs to the player (check active dragon OR stored eggs)
-            boolean isPlayerEgg = (eggId.equals(plugin.getDatabaseManager().getDragonEggId(playerUuidString))) || 
-                                  (plugin.getDatabaseManager().getEggData(playerUuidString, eggId) != null && !plugin.getDatabaseManager().getEggData(playerUuidString, eggId).isEmpty());
-
-            if (!isPlayerEgg) {
+            
+            // Extract the dragon_egg_id from NBT
+            if (!item.hasCompoundTag()) {
+                return;
+            }
+            
+            CompoundTag nbt = item.getNamedTag();
+            if (nbt == null) {
+                return;
+            }
+            
+            String eggId = nbt.getString("dragon_egg_id");
+            if (eggId == null || eggId.isEmpty()) {
+                return;
+            }
+            
+            String playerUuidString = player.getUniqueId().toString();
+            
+            // Check if this egg belongs to the player
+            if (!plugin.getDatabaseManager().isEggOwnedByPlayer(eggId, playerUuidString)) {
                 player.sendMessage("§c" + plugin.getLanguageString("messages.errors.eggNotBelongToYou"));
                 
                 // --- Egg Explosion Logic ---
@@ -130,6 +124,24 @@ public class EventListenerEdit implements Listener {
                 // --- End Egg Explosion Logic ---
                 
                 return; // Stop further processing
+            }
+            
+            // Check if this egg was reported as lost but still exists
+            // This can happen if the egg was reported lost in the GUI but the item is still in inventory
+            if (!plugin.getDatabaseManager().doesEggExist(eggId)) {
+                plugin.getLogger().info("Player " + player.getName() + " tried to use a reported lost egg: " + eggId);
+                player.sendMessage("§c" + plugin.getLanguageString("messages.errors.lostEggExploded"));
+                
+                // --- Egg Explosion Logic ---
+                player.getInventory().setItemInHand(Item.get(Item.AIR));
+                player.getInventory().sendContents(player); 
+                
+                player.getLevel().addLevelSoundEvent(player, cn.nukkit.network.protocol.LevelSoundEventPacket.SOUND_EXPLODE, -1, cn.nukkit.entity.Entity.NETWORK_ID, false, false);
+                player.getLevel().addParticle(new cn.nukkit.level.particle.ExplodeParticle(player.getPosition()));
+                
+                // Damage the player more for using a reported lost egg
+                player.attack(new cn.nukkit.event.entity.EntityDamageEvent(player, cn.nukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_EXPLOSION, 2f));
+                return;
             }
 
             boolean isHatched = plugin.getDatabaseManager().isEggHatched(eggId);
@@ -157,17 +169,67 @@ public class EventListenerEdit implements Listener {
                 player.sendMessage(messageColor + plugin.getLanguageString(messageKey));
 
             } else {
-                // --- Regular Right-Click: Summon/Despawn ---
+                // --- Regular Right-Click: Summon/Despawn OR Show Incubating Status --- 
                 if (isHatched) {
                     if (plugin.hasActiveDragon(player)) {
-                        plugin.despawnDragon(player); // Despawn existing dragon
-                        player.sendMessage("§a" + plugin.getLanguageString("messages.success.dragonDismissed"));
+                        // Get the player's active dragon
+                        DragonEntity activeDragon = plugin.getActiveDragons().get(player.getUniqueId());
+                        
+                        // Check if the active dragon matches this egg's ID
+                        if (activeDragon != null && eggId.equals(activeDragon.getDragonId())) {
+                            // Egg matches the active dragon, so despawn it
+                            plugin.despawnDragon(player);
+                            player.sendMessage("§a" + plugin.getLanguageString("messages.success.dragonDismissed"));
+                        } else {
+                            // Egg doesn't match the active dragon
+                            player.sendMessage("§c" + plugin.getLanguageString("messages.errors.wrongEgg"));
+                        }
                     } else {
-                        handleSummonDragon(player); // Attempt to summon
+                        // *** Check if dragon needs naming BEFORE summoning ***
+                        String existingName = plugin.getDatabaseManager().getDragonName(eggId);
+                        boolean needsNaming = existingName == null || existingName.trim().isEmpty() || existingName.equals("Dragon");
+
+                        plugin.getLogger().info("[Summon Check] EggId: " + eggId + ", Existing Name: '" + existingName + "', Needs Naming: " + needsNaming);
+
+                        if (needsNaming) {
+                            // Dragon hasn't been named yet, open the naming form
+                            plugin.getDragonGUI().openFirstNamingForm(player, eggId);
+                            plugin.getLogger().info("Opening first naming form for egg " + eggId);
+                        } else {
+                            // Dragon already has a name, proceed with summoning
+                            plugin.getLogger().info("Dragon for egg " + eggId + " already named ('" + existingName + "'), summoning directly.");
+                            handleSummonDragon(player); // Attempt to summon
+                            
+                            // Do not give shards for already named dragons
+                            // This avoids giving shards after server restart
+                        }
                     }
                 } else {
-                    // Egg not hatched, inform about shift-click
-                    player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.info.useShiftClickToIncubate"));
+                    // Egg is NOT hatched. Check if it IS incubating.
+                    boolean isIncubating = plugin.getDatabaseManager().isEggIncubating(eggId);
+                    plugin.getLogger().info("[Egg Listener Debug] onPlayerInteract (EventListenerEdit): eggId='" + eggId + "', isHatched=" + isHatched + ", isIncubating=" + isIncubating);
+
+                    if (isIncubating) {
+                        // It's not hatched, but it IS incubating. Tell the player the remaining time.
+                        int requiredSeconds = plugin.getConfig().getInt("timing.eggs.incubation_time_seconds", 3600);
+                        int currentProgress = 0;
+                        try {
+                            Map<String, String> eggData = plugin.getDatabaseManager().getEggData(player.getUniqueId().toString(), eggId);
+                            if (eggData != null && eggData.containsKey("incubationProgress")) {
+                                currentProgress = Integer.parseInt(eggData.get("incubationProgress"));
+                            }
+                        } catch (Exception e) {
+                            plugin.getLogger().warning("Could not retrieve incubation progress for egg " + eggId + " during interact check: " + e.getMessage());
+                        }
+                        int remainingSeconds = Math.max(0, requiredSeconds - currentProgress);
+                        String remainingTimeFormatted = formatTime(remainingSeconds); // Use helper method
+
+                        player.sendMessage(plugin.getLanguageString("messages.errors.alreadyIncubating", remainingTimeFormatted));
+                    } else {
+                        // It's not hatched AND not incubating. Tell them to use shift-click for incubation.
+                        // Use the correct key from language file
+                        player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.info.useShiftClickToIncubate"));
+                    }
                 }
             }
         }
@@ -302,5 +364,25 @@ public class EventListenerEdit implements Listener {
             // Check a bit later to ensure player data is fully loaded
             plugin.checkAndResumeIncubation(player);
         }, 40); // Check after 2 seconds (40 ticks)
+    }
+
+    // Helper method to format time (moved here from DragonEggListener)
+    private String formatTime(int totalSeconds) {
+        if (totalSeconds <= 0) {
+            return "0 seconds";
+        }
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        StringBuilder sb = new StringBuilder();
+        if (minutes > 0) {
+            sb.append(minutes).append(" minute").append(minutes > 1 ? "s" : "");
+        }
+        if (seconds > 0) {
+            if (minutes > 0) {
+                sb.append(", ");
+            }
+            sb.append(seconds).append(" second").append(seconds > 1 ? "s" : "");
+        }
+        return sb.toString();
     }
 }

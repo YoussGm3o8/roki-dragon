@@ -27,6 +27,7 @@ import nukkitcoders.mobplugin.entities.HorseBase;
 import nukkitcoders.mobplugin.entities.projectile.EntityGhastFireBall;
 import cn.nukkit.level.ParticleEffect;
 import cn.nukkit.level.particle.ElectricSparkParticle;
+import cn.nukkit.block.Block;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
@@ -44,9 +45,49 @@ import java.util.UUID;
  * Extends HorseBase for riding mechanics and implements CustomEntity for Nukkit integration.
  */
 public class DragonEntity extends HorseBase implements CustomEntity, EntityInteractable {
-    public static final String IDENTIFIER = "custom:dragon";
-    public static final EntityDefinition DEFINITION =
-            EntityDefinition.builder().identifier(DragonEntity.IDENTIFIER).implementation(DragonEntity.class).build();
+    // Replaced generic identifier with type-specific identifiers
+    public static final String FIRE_DRAGON_IDENTIFIER = "roki:fire_dragon";
+    public static final String ICE_DRAGON_IDENTIFIER = "roki:ice_dragon";
+    public static final String LIGHTNING_DRAGON_IDENTIFIER = "roki:lightning_dragon";
+    public static final String WATER_DRAGON_IDENTIFIER = "roki:water_dragon";
+    public static final String EARTH_DRAGON_IDENTIFIER = "roki:earth_dragon";
+    
+    // Default identifier (used as fallback)
+    public static final String DEFAULT_IDENTIFIER = FIRE_DRAGON_IDENTIFIER;
+    
+    // The actual definition will be set dynamically based on dragon type
+    private static EntityDefinition DEFINITION;
+    
+    // Get the correct identifier based on dragon type
+    public static String getIdentifierForType(String dragonType) {
+        if (dragonType == null) {
+            return DEFAULT_IDENTIFIER;
+        }
+        
+        switch (dragonType) {
+            case "Fire Dragon":
+                return FIRE_DRAGON_IDENTIFIER;
+            case "Ice Dragon":
+                return ICE_DRAGON_IDENTIFIER;
+            case "Lightning Dragon":
+                return LIGHTNING_DRAGON_IDENTIFIER;
+            case "Water Dragon":
+                return WATER_DRAGON_IDENTIFIER;
+            case "Earth Dragon":
+                return EARTH_DRAGON_IDENTIFIER;
+            default:
+                return DEFAULT_IDENTIFIER;
+        }
+    }
+    
+    // Get the entity definition with the appropriate identifier
+    public static EntityDefinition getDefinitionForType(String dragonType) {
+        String identifier = getIdentifierForType(dragonType);
+        return EntityDefinition.builder()
+            .identifier(identifier)
+            .implementation(DragonEntity.class)
+            .build();
+    }
 
     // Removed DEFAULT_MOVE_SPEED constant, will use config value
     private static final float PASSENGER_HEIGHT_OFFSET = 2.5f;
@@ -63,7 +104,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private DragonPlugin plugin; // Keep field, make non-final
 
     // Constants for Magic Numbers
-    private static final Vector3f RIDER_SEAT_POSITION = new Vector3f(-0.5f, 4f, -1f);
+    private static final Vector3f RIDER_SEAT_POSITION = new Vector3f(-0.8f, 4f, -1f);
     private static final int DISMOUNT_RESISTANCE_DURATION_TICKS = 5 * 20;
     private static final int DISMOUNT_RESISTANCE_AMPLIFIER = 254; // Max amplifier
     private static final long EMPTY_DESPAWN_DELAY_MILLIS = 5 * 60 * 1000; // 5 minutes
@@ -124,6 +165,9 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private static double DEFAULT_BASE_DAMAGE = 15.0;
     private static double DEFAULT_DAMAGE_REDUCTION = 0.25;
 
+    // Flight speed constants
+    private static final float MAX_SPEED = 0.92f;
+
     /**
      * Sets the static default stats for all DragonEntity instances, typically loaded from config.
      * @param maxHealth Default maximum health.
@@ -171,16 +215,19 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.pluginHealth = this.pluginMaxHealth; // Start at full plugin health
         // --- End Set Plugin Health ---
 
-        // --- Set Nukkit Health to Minimal Value (1) ---
-        this.setMaxHealth(1); // Set Nukkit max health low
+        // --- Set Nukkit Health to Low But Survivable Value ---
+        this.setMaxHealth(10); // Set Nukkit max health to something survivable
         super.initEntity(); // Call super *after* setting Nukkit max health
-        this.setHealth(1f); // Set Nukkit current health low
-        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 1f)); // Ensure data property reflects low Nukkit health
+        this.setHealth(10f); // Set Nukkit current health to survive environmental effects
+        this.setDataProperty(new FloatEntityData(DATA_HEALTH, 10f)); // Ensure data property reflects health
+        
+        // Make name tag visible but health bar minimal
+        this.setNameTagVisible(true);
+        this.setNameTagAlwaysVisible(true);
         // --- End Set Nukkit Health ---
 
         this.fireProof = true;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_FIRE_IMMUNE, true);
-        // Removed redundant DATA_HEALTH set here
 
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SADDLED, true);
 
@@ -192,6 +239,13 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         // Load customization from NBT if exists
         if (this.namedTag.contains(NBT_KEY_DRAGON_TYPE)) {
             this.dragonType = this.namedTag.getString(NBT_KEY_DRAGON_TYPE);
+            // *** ADDED LOGGING ***
+            if (plugin != null) { // Check if plugin instance is available
+                plugin.getLogger().info("[DragonEntity Init Debug] Loaded DragonType '" + this.dragonType + "' from NBT for entity ID " + this.getId());
+            } else {
+                System.out.println("[DragonEntity Init Debug - No Plugin] Loaded DragonType '" + this.namedTag.getString(NBT_KEY_DRAGON_TYPE) + "' from NBT for entity ID " + this.getId());
+            }
+            // *** END LOGGING ***
         }
         if (this.namedTag.contains(NBT_KEY_PARTICLE_EFFECT)) {
             this.particleEffect = this.namedTag.getString(NBT_KEY_PARTICLE_EFFECT);
@@ -202,6 +256,63 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
         // Make dragon damageable
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_NO_AI, false);
+        
+        // Log the entity identifier being used
+        String identifier = getIdentifierForType(this.dragonType);
+        if (plugin != null) {
+            plugin.getLogger().info("[DragonEntity] Using entity identifier: " + identifier + " for dragon type: " + this.dragonType);
+        } else {
+            System.out.println("[DragonEntity - No Plugin] Using entity identifier: " + identifier + " for dragon type: " + this.dragonType);
+        }
+        
+        // Apply visual customizations immediately on initialization
+        applyTypeSpecificProperties();
+    }
+
+    /**
+     * Applies specific properties based on the dragon type
+     */
+    private void applyTypeSpecificProperties() {
+        switch (this.dragonType) {
+            case "Fire Dragon":
+                this.fireProof = true;
+                // Set any Fire Dragon specific properties
+                break;
+            case "Ice Dragon":
+                this.fireProof = false;
+                // Set any Ice Dragon specific properties
+                break;
+            case "Lightning Dragon":
+                this.fireProof = true;
+                // Set any Lightning Dragon specific properties
+                break;
+            case "Water Dragon":
+                this.fireProof = false;
+                // Set Water Dragon specific properties
+                break;
+            case "Earth Dragon":
+                this.fireProof = false;
+                // Set Earth Dragon specific properties
+                break;
+            default:
+                this.fireProof = true; // Default behavior
+                break;
+        }
+        
+        // Set the entity identifier specifically to match this dragon type
+        // This will be used by clients with the resource pack to select the proper model
+        String identifier = getIdentifierForType(this.dragonType);
+        if (plugin != null) {
+            plugin.getLogger().info("[DragonEntity] Setting identifier to: " + identifier + " for dragon: " + this.getName());
+        } else {
+            System.out.println("[DragonEntity - No Plugin] Setting identifier to: " + identifier + " for dragon: " + this.getName());
+        }
+        
+        // This ensures that when the entity is first created
+        // the visual appearance will match the dragon type
+        if (this.level != null) {
+            applyCustomizations();
+        }
     }
 
     /**
@@ -210,7 +321,8 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
      */
     @Override
     public EntityDefinition getEntityDefinition() {
-        return DEFINITION;
+        String currentType = this.dragonType != null ? this.dragonType : "Fire Dragon";
+        return getDefinitionForType(currentType);
     }
 
     /**
@@ -228,8 +340,22 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
      */
     @Override
     public void spawnTo(Player player) {
+        // Debug the dragon type to see if it's correct
+        if (plugin != null) {
+            plugin.getLogger().info("[DragonEntity SpawnTo Debug] dragonType = '" + this.dragonType + "'");
+        }
+        
+        // Get the correct identifier for this dragon type
+        String identifier = getIdentifierForType(this.dragonType);
+        
+        // Log the entity identifier being used
+        if (plugin != null) {
+            plugin.getLogger().info("[DragonEntity SpawnTo] Using identifier: " + identifier + " for dragon: " + this.getName() + ", dragonType = " + this.dragonType);
+        }
+        
+        // Create the packet for spawning the entity
         AddEntityPacket pk = new AddEntityPacket();
-        pk.type = this.getNetworkId();
+        pk.type = this.getNetworkId(); // All use the Ender Dragon network ID for rendering
         pk.entityUniqueId = this.getId();
         pk.entityRuntimeId = this.getId();
         pk.x = (float) this.x;
@@ -242,15 +368,32 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         pk.pitch = (float) this.pitch;
 
         pk.attributes = new cn.nukkit.entity.Attribute[]{
-                // Send Nukkit health (1f) to client
-                cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MAX_HEALTH).setMaxValue(1f).setValue(1f),
+                // Set minimal health attributes to keep entity alive but minimize health bar
+                cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MAX_HEALTH).setMaxValue(10f).setValue(10f),
                 cn.nukkit.entity.Attribute.getAttribute(cn.nukkit.entity.Attribute.MOVEMENT_SPEED).setValue(this.moveSpeed)
         };
+
+        // Set specific metadata for dragon type (add a special tag to identify the dragon type)
+        if (identifier.equals(FIRE_DRAGON_IDENTIFIER)) {
+            this.setNameTag(TextFormat.RED + this.getNameTag());
+        } else if (identifier.equals(ICE_DRAGON_IDENTIFIER)) {
+            this.setNameTag(TextFormat.AQUA + this.getNameTag());
+        } else if (identifier.equals(LIGHTNING_DRAGON_IDENTIFIER)) {
+            this.setNameTag(TextFormat.YELLOW + this.getNameTag());
+        } else if (identifier.equals(WATER_DRAGON_IDENTIFIER)) {
+            this.setNameTag(TextFormat.BLUE + this.getNameTag());
+        } else if (identifier.equals(EARTH_DRAGON_IDENTIFIER)) {
+            this.setNameTag(TextFormat.GREEN + this.getNameTag());
+        }
+        
+        // Ensure nametag is always visible
+        this.setNameTagVisible(true);
+        this.setNameTagAlwaysVisible(true);
 
         pk.metadata = this.dataProperties;
         player.dataPacket(pk);
 
-        // Apply visual customizations
+        // Apply visual customizations like particles
         applyCustomizations();
 
         super.spawnTo(player);
@@ -507,7 +650,6 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         return false;
     }
 
-    private static final float MAX_SPEED = 0.92f;
     /**
      * Handles player input while riding the dragon to control movement and direction.
      * Uses pitch and yaw directly from the PlayerAuthInputPacket to avoid potential state issues.
@@ -560,7 +702,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
      * Creates the AddEntityPacket specific to this dragon entity.
      * @return The AddEntityPacket.
      */
-     @Override
+    @Override
     protected DataPacket createAddEntityPacket() {
         AddEntityPacket addEntity = new AddEntityPacket();
         addEntity.type = this.getNetworkId();
@@ -576,7 +718,12 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         addEntity.y = (float) this.y + this.getBaseOffset();
         addEntity.speedZ = (float) this.motionZ;
         addEntity.metadata = this.dataProperties.clone();
-        addEntity.attributes = new Attribute[]{Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue((float)DEFAULT_MAX_HEALTH).setValue((float)DEFAULT_MAX_HEALTH)};
+        
+        // Include minimal health attributes to keep entity alive
+        addEntity.attributes = new Attribute[]{
+            Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(10f).setValue(10f),
+            Attribute.getAttribute(Attribute.MOVEMENT_SPEED).setValue(this.moveSpeed)
+        };
 
         addEntity.links = new EntityLink[this.passengers.size()];
 
@@ -625,7 +772,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
     /**
      * Handles the entity being attacked. Applies damage reduction based on type and source.
-     * Prevents damage from the owner. Triggers death handling if health drops to 0 or below.
+     * Keeps visual damage feedback while managing health through the plugin system.
      * @param source The damage event source.
      * @return {@code true} if the attack was successful (damage applied), {@code false} otherwise.
      */
@@ -637,19 +784,12 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
         if (source.getCause() == EntityDamageEvent.DamageCause.VOID) {
             // Void damage should still kill instantly
+            this.pluginHealth = 0;
             this.handleDeath(); 
             return true;
         }
 
-        // REMOVED: Owner damage prevention check removed as per request
-        // if (source instanceof EntityDamageByEntityEvent) {
-        //     Entity damager = ((EntityDamageByEntityEvent) source).getDamager();
-        //     if (damager instanceof Player && this.owner != null && ((Player) damager).getUniqueId().equals(this.owner.getUniqueId())) { 
-        //         return false;
-        //     }
-        // }
-
-        // Apply damage reduction based on dragon type
+        // Apply damage reduction based on dragon type to our plugin health
         float damage = source.getDamage();
         boolean isImmune = false;
         switch (this.dragonType) {
@@ -686,6 +826,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         }
 
         if (isImmune) {
+            source.setCancelled(true);
             return false; // Damage type ignored
         }
 
@@ -696,14 +837,32 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         // --- Trigger custom death logic if plugin health is zero or less --- 
         if (this.pluginHealth <= 0) {
              this.pluginHealth = 0; // Ensure health doesn't go negative visually
+             // Allow the normal damage to occur for visual feedback, but handle death our way
+             super.attack(source); 
              handleDeath();
              return true; // Attack resulted in death
         }
-        // --- End Trigger custom death logic --- 
-
-        // We don't call super.attack() or update Nukkit's DATA_HEALTH
-        // We might want to play a hurt sound or animation here if desired
-        // this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_HURT); // Example
+        
+        // Let vanilla damage processing occur for hit effects, but cap it to never kill
+        // the entity (by ensuring it always has at least 2 health after damage)
+        float currentHealth = this.getHealth();
+        if (currentHealth - source.getFinalDamage() < 2) {
+            source.setDamage(Math.max(0, currentHealth - 2));
+        }
+        
+        // Actually apply the damage for visual effect
+        super.attack(source);
+        
+        // Make sure the entity doesn't die from this damage
+        if (this.getHealth() < 2) {
+            this.setHealth(2);
+        }
+        
+        // Force action bar update for rider to see new health immediately
+        if (!this.passengers.isEmpty() && this.passengers.get(0) instanceof Player) {
+            Player rider = (Player) this.passengers.get(0);
+            sendRidingActionBar(rider);
+        }
         
         return true; // Attack was processed (damage applied to plugin health)
     }
@@ -711,7 +870,36 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     private void handleDeath() {
         plugin.getLogger().info("Dragon " + this.getName() + " owned by " + (owner != null ? owner.getName() : "N/A") + " is dying.");
 
-        // Removed XP restoration logic
+        // Get information about what killed the dragon
+        String killerName = "Unknown";
+        String location = this.level.getName() + " (" + (int)this.x + "," + (int)this.y + "," + (int)this.z + ")";
+        
+        // Try to determine the killer from the last damage cause if available
+        EntityDamageEvent lastDamage = this.getLastDamageCause();
+        if (lastDamage != null) {
+            if (lastDamage instanceof EntityDamageByEntityEvent) {
+                Entity damager = ((EntityDamageByEntityEvent) lastDamage).getDamager();
+                if (damager instanceof Player) {
+                    killerName = ((Player) damager).getName();
+                } else {
+                    killerName = damager.getName();
+                }
+            } else {
+                // Get the damage cause name (e.g., VOID, FIRE, etc.)
+                killerName = lastDamage.getCause().name();
+            }
+        }
+        
+        // Mark dragon as dead in the database
+        String eggId = this.getDragonId();
+        if (eggId != null && plugin.getDatabaseManager() != null) {
+            boolean marked = plugin.getDatabaseManager().markDragonAsDead(eggId, killerName, location);
+            if (marked) {
+                plugin.getLogger().info("Marked dragon " + eggId + " as dead in the database");
+            } else {
+                plugin.getLogger().warning("Failed to mark dragon " + eggId + " as dead in the database");
+            }
+        }
 
         // Dismount all passengers
         dismountAllPassengers();
@@ -721,15 +909,8 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             plugin.onDragonDeath(owner);
         }
 
-        // Remove from database (moved from listener)
-        if (owner != null) {
-            try {
-                plugin.getDatabaseManager().removeDragon(owner.getUniqueId().toString());
-                plugin.getLogger().info("Removed dragon entry for " + owner.getName() + " from database.");
-            } catch (Exception e) {
-                plugin.getLogger().error("Error removing dragon from database for " + owner.getName(), e);
-            }
-        }
+        // We now mark the dragon as dead in the database instead of removing it
+        // This replaces the original database removal code
 
         // Drop items or create effects
         if (this.level != null) {
@@ -746,8 +927,9 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
             this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_EXPLODE);
         }
 
-        // Finally, mark for removal (actual closing happens in super.kill() or entity tick)
-        // Do not call this.close() directly here as it might interfere with event processing
+        // Force close the entity to fully remove it from the world
+        this.close();
+        
         plugin.getLogger().info("Dragon " + this.getName() + " death handling complete.");
     }
 
@@ -909,6 +1091,16 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
                 shootAction = this::shootLightningBall;
                 missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
                 break;
+            case "Water Dragon":
+                requiredItem = Item.get(Item.PRISMARINE_CRYSTALS); // Water-themed item
+                shootAction = this::shootWaterball;
+                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                break;
+            case "Earth Dragon":
+                requiredItem = Item.get(Item.CLAY_BALL); // Earth-themed item
+                shootAction = this::shootEarthball;
+                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                break;
             default:
                  plugin.getLogger().warning("Attempted to shoot with unknown dragon type: " + this.dragonType);
                  // Default to fire dragon behavior for safety
@@ -1002,6 +1194,14 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
                 this.fireProof = true;
                 // Add lightning effects
                 break;
+            case "Water Dragon":
+                this.fireProof = false;
+                // Water dragons are resistant to drowning
+                break;
+            case "Earth Dragon":
+                this.fireProof = false;
+                // Earth dragons are resistant to fall damage
+                break;
             default:
                 this.fireProof = true; // Default behavior
                 break;
@@ -1077,39 +1277,124 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         }
 
         Vector3 particlePos = this.add(0, 1.2, 0);
+        Vector3 particlePosWings = this.add(0, 1.5, 0);
 
         for (Player player : this.getViewers().values()) {
             if (player.distanceSquared(this) <= PARTICLE_RENDER_DISTANCE_SQUARED) {
                 switch (this.dragonType) {
                     case "Fire Dragon":
-                        if (this.particleEffect.equals("Flame Trail")) {
-                            this.level.addParticle(new cn.nukkit.level.particle.FlameParticle(particlePos), player);
+                        // Multiple flame particles for fire dragons
+                        for (int i = 0; i < 3; i++) {
+                            Vector3 randPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            this.level.addParticle(new cn.nukkit.level.particle.FlameParticle(randPos), player);
+                        }
+                        
+                        // Add smoke particles too
+                        if (Math.random() < 0.3) {
+                            this.level.addParticle(new cn.nukkit.level.particle.SmokeParticle(
+                                particlePos.add((Math.random() - 0.5), 0.2, (Math.random() - 0.5))
+                            ), player);
                         }
                         break;
+                        
                     case "Ice Dragon":
-                        // Call specific Ice Dragon effects method (handles particles internally)
-                        applyIceDragonEffects(particlePos);
-                        // Remove the generic trail particle if specific effects are handled
-                        // if (this.particleEffect.equals("Ice Trail")) {
-                        //     this.level.addParticleEffect(particlePos, ParticleEffect.FALLING_DUST_TOP_SNOW, 0, 1, player); // data=0, count=1
-                        // }
+                        // Custom ice particles for ice dragons
+                        for (int i = 0; i < 3; i++) {
+                            Vector3 randPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            // Use water drip particles instead for ice effects
+                            this.level.addParticle(new cn.nukkit.level.particle.WaterDripParticle(randPos), player);
+                        }
+                        
+                        // Add extra particles on wings
+                        for (int i = 0; i < 2; i++) {
+                            Vector3 wingPos = particlePosWings.add(
+                                (Math.random() - 0.5) * 3, // wider spread for wings
+                                Math.random() * 0.2,
+                                (Math.random() - 0.5) * 3
+                            );
+                            this.level.addParticle(new cn.nukkit.level.particle.WaterDripParticle(wingPos), player);
+                        }
                         break;
+                        
                     case "Lightning Dragon":
-                        // Call specific Lightning Dragon effects method (handles particles internally)
-                        applyLightningDragonEffects(particlePos);
-                        // Remove the generic trail particle if specific effects are handled
-                        // if (this.particleEffect.equals("Lightning Trail")) {
-                        //     this.level.addParticle(new cn.nukkit.level.particle.ElectricSparkParticle(particlePos), player);
-                        // }
+                        // Electric spark particles for lightning dragons
+                        for (int i = 0; i < 3; i++) {
+                            Vector3 randPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            this.level.addParticle(new ElectricSparkParticle(randPos), player);
+                        }
+                        
+                        // Occasional larger spark burst
+                        if (Math.random() < 0.1) {
+                            for (int i = 0; i < 8; i++) {
+                                Vector3 burstPos = particlePos.add(
+                                    (Math.random() - 0.5) * 3,
+                                    Math.random() * 1.0,
+                                    (Math.random() - 0.5) * 3
+                                );
+                                this.level.addParticle(new ElectricSparkParticle(burstPos), player);
+                            }
+                        }
                         break;
+                        
+                    case "Water Dragon":
+                        // Water bubble particles for water dragons
+                        for (int i = 0; i < 3; i++) {
+                            Vector3 randPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            this.level.addParticle(new cn.nukkit.level.particle.BubbleParticle(randPos), player);
+                        }
+                        
+                        // Add splashing water particles occasionally
+                        if (Math.random() < 0.2) {
+                            Vector3 splashPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            this.level.addParticle(new cn.nukkit.level.particle.SplashParticle(splashPos), player);
+                        }
+                        break;
+                        
+                    case "Earth Dragon":
+                        // Add earthy particles for earth dragons
+                        for (int i = 0; i < 3; i++) {
+                            Vector3 randPos = particlePos.add(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 0.5,
+                                (Math.random() - 0.5) * 2
+                            );
+                            // Use terrain particles for earth effect
+                            if (Math.random() < 0.5) {
+                                this.level.addParticle(new cn.nukkit.level.particle.DustParticle(randPos, 139, 69, 19), player);
+                            } else {
+                                this.level.addParticle(new cn.nukkit.level.particle.DustParticle(randPos, 100, 100, 100), player);
+                            }
+                        }
+                        break;
+                        
                     default:
                         // Default to fire particles
                         this.level.addParticle(new cn.nukkit.level.particle.FlameParticle(particlePos), player);
                         break;
-                    }
-                } // End Switch
-            } // End Inner if
-        } // End For loop
+                }
+            }
+        }
+    }
 
     /**
      * Sets the DragonShardManager instance for this entity.
@@ -1317,6 +1602,140 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_THUNDER);
     }
 
+    private void shootWaterball() {
+        // Calculate projectile spawn position with adjusted yaw (180 degrees)
+        Vector3 pos = this.add(0, this.getEyeHeight(), 0);
+        
+        // Calculate direction vector with 180 degree yaw adjustment
+        double adjustedYaw = this.yaw + 180;
+        double yawRadians = Math.toRadians(adjustedYaw);
+        double pitchRadians = Math.toRadians(this.pitch);
+        
+        // Calculate direction vector with adjusted yaw
+        double x = -Math.sin(yawRadians) * Math.cos(pitchRadians);
+        double y = -Math.sin(pitchRadians);
+        double z = Math.cos(yawRadians) * Math.cos(pitchRadians);
+        Vector3 directionVector = new Vector3(x, y, z);
+        
+        Vector3 spawnPos = pos.add(directionVector.multiply(FIREBALL_OFFSET));
+
+        // Get cooldown from config
+        int cooldown = plugin.getConfig().getInt("timing.cooldowns.ability_milliseconds", 500);
+        long now = System.currentTimeMillis();
+
+        // Check if rider is player
+        if (this.passengers.isEmpty() || !(this.passengers.get(0) instanceof Player)) {
+            return;
+        }
+        Player rider = (Player) this.passengers.get(0);
+
+        // Create a waterball using IceBall for now, since waterball doesn't exist
+        // In a complete implementation, you'd create a new EntityWaterBall class
+        CompoundTag nbt = Entity.getDefaultNBT(spawnPos);
+        nbt.putLong("DragonID", this.getId());
+        EntityIceBall waterball = new EntityIceBall(this.getChunk(), nbt, this);
+        waterball.setMotion(directionVector.multiply(FIREBALL_SPEED));
+        waterball.spawnToAll();
+        
+        // Add water particle effects
+        Server.getInstance().getScheduler().scheduleRepeatingTask(plugin, () -> {
+            if (waterball.isClosed()) {
+                return; // Stop if waterball is gone
+            }
+            
+            // Create water particle trails
+            double time = (System.currentTimeMillis() - now) / 100.0;
+            for (int i = 0; i < 3; i++) {
+                double radius = 0.3 + (i * 0.2);
+                double speed = 2.0 + (i * 0.5);
+                
+                double spiralX = Math.cos(time * speed) * radius;
+                double spiralY = Math.sin(time * speed) * radius;
+                double spiralZ = Math.cos(time * speed + Math.PI/2) * radius;
+                
+                Vector3 particlePos = waterball.add(spiralX, spiralY, spiralZ);
+                
+                // Add water drip and bubble particles
+                if (Math.random() < 0.7) {
+                    waterball.level.addParticle(new cn.nukkit.level.particle.WaterDripParticle(particlePos));
+                }
+                if (Math.random() < 0.3) {
+                    waterball.level.addParticle(new cn.nukkit.level.particle.BubbleParticle(particlePos));
+                }
+            }
+        }, 1, false);
+        
+        // Play appropriate sound effect
+        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_SPLASH);
+    }
+
+    private void shootEarthball() {
+        // Calculate projectile spawn position with adjusted yaw (180 degrees)
+        Vector3 pos = this.add(0, this.getEyeHeight(), 0);
+        
+        // Calculate direction vector with 180 degree yaw adjustment
+        double adjustedYaw = this.yaw + 180;
+        double yawRadians = Math.toRadians(adjustedYaw);
+        double pitchRadians = Math.toRadians(this.pitch);
+        
+        // Calculate direction vector with adjusted yaw
+        double x = -Math.sin(yawRadians) * Math.cos(pitchRadians);
+        double y = -Math.sin(pitchRadians);
+        double z = Math.cos(yawRadians) * Math.cos(pitchRadians);
+        Vector3 directionVector = new Vector3(x, y, z);
+        
+        Vector3 spawnPos = pos.add(directionVector.multiply(FIREBALL_OFFSET));
+
+        // Get cooldown from config
+        int cooldown = plugin.getConfig().getInt("timing.cooldowns.ability_milliseconds", 500);
+        long now = System.currentTimeMillis();
+
+        // Check if rider is player
+        if (this.passengers.isEmpty() || !(this.passengers.get(0) instanceof Player)) {
+            return;
+        }
+        Player rider = (Player) this.passengers.get(0);
+
+        // Create an earthball using standard fireball for now
+        // In a complete implementation, you'd create a new EntityEarthBall class
+        CompoundTag nbt = Entity.getDefaultNBT(spawnPos);
+        nbt.putLong("DragonID", this.getId());
+        EntityBedFireBall earthball = new EntityBedFireBall(plugin, this.getChunk(), nbt, this);
+        earthball.setMotion(directionVector.multiply(FIREBALL_SPEED));
+        earthball.spawnToAll();
+        
+        // Add earth particle effects
+        Server.getInstance().getScheduler().scheduleRepeatingTask(plugin, () -> {
+            if (earthball.isClosed()) {
+                return; // Stop if earthball is gone
+            }
+            
+            // Create spiral trails
+            double time = (System.currentTimeMillis() - now) / 100.0;
+            for (int i = 0; i < 3; i++) {
+                double radius = 0.3 + (i * 0.2);
+                double speed = 2.0 + (i * 0.5);
+                
+                double spiralX = Math.cos(time * speed) * radius;
+                double spiralY = Math.sin(time * speed) * radius;
+                double spiralZ = Math.cos(time * speed + Math.PI/2) * radius;
+                
+                Vector3 particlePos = earthball.add(spiralX, spiralY, spiralZ);
+                
+                // Add dust particles with earth colors
+                if (Math.random() < 0.5) {
+                    // Brown dust (dirt color)
+                    earthball.level.addParticle(new cn.nukkit.level.particle.DustParticle(particlePos, 139, 69, 19));
+                } else {
+                    // Gray dust (stone color)
+                    earthball.level.addParticle(new cn.nukkit.level.particle.DustParticle(particlePos, 100, 100, 100));
+                }
+            }
+        }, 1, false);
+        
+        // Play appropriate sound effect
+        this.level.addLevelSoundEvent(this, LevelSoundEventPacket.SOUND_BREAK);
+    }
 
     // Placeholder methods for special abilities
     private void applyIceDragonEffects(Vector3 position) {

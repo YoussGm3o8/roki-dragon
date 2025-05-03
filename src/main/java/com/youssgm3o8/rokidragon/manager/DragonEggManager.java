@@ -7,6 +7,7 @@ import cn.nukkit.utils.TextFormat;
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.dragon.DragonEntity;
 import com.youssgm3o8.rokidragon.data.DatabaseManager;
+import com.youssgm3o8.rokidragon.util.DragonUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -293,7 +294,7 @@ public class DragonEggManager {
     }
 
     /**
-     * Updates the lore of a Dragon Egg item based on its current status (hatched, incubating, etc.).
+     * Updates the lore of a Dragon Egg item based on its current status (hatched, incubating, dead, etc.).
      * Reads status information from the database.
      *
      * @param item  The Dragon Egg item to update.
@@ -331,12 +332,44 @@ public class DragonEggManager {
         String statusText;
         String instructionText;
         String progressText = ""; // Default to empty
+        String nameAndTypeText = ""; // For hatched eggs
+        String deathInfoText = ""; // For dead dragons
+        
         boolean isHatched = databaseManager.isEggHatched(eggId);
-        boolean isIncubating = !isHatched && databaseManager.isEggIncubating(eggId);
+        boolean isDead = databaseManager.isDragonDead(eggId);
+        boolean isIncubating = !isHatched && !isDead && databaseManager.isEggIncubating(eggId);
 
-        if (isHatched) {
+        if (isDead) {
+            // Dragon is dead - show death info
+            statusText = plugin.getLanguageString("messages.egg.status.dead", 
+                databaseManager.getDragonName(eggId)); // Pass dragon name for message
+            instructionText = plugin.getLanguageString("messages.egg.instructions.dead");
+            
+            // Get death details
+            Map<String, Object> deathInfo = databaseManager.getDragonDeathInfo(eggId);
+            if (deathInfo != null) {
+                String killedBy = (String) deathInfo.get("killedBy");
+                String deathTime = (String) deathInfo.get("deathTime");
+                String deathLocation = (String) deathInfo.get("deathLocation");
+                
+                // Format death information
+                deathInfoText = TextFormat.RED + "Killed by: " + TextFormat.GRAY + killedBy + "\n" +
+                                TextFormat.RED + "Time: " + TextFormat.GRAY + deathTime + "\n" +
+                                TextFormat.RED + "Location: " + TextFormat.GRAY + deathLocation;
+            }
+            
+            // Add dragon info
+            String dragonName = databaseManager.getDragonName(eggId);
+            String dragonType = databaseManager.getDragonType(eggId);
+            nameAndTypeText = DragonUtils.getColorByType(dragonType) + dragonName;
+            
+        } else if (isHatched) {
             statusText = plugin.getLanguageString("messages.egg.status.hatched");
             instructionText = plugin.getLanguageString("messages.egg.instructions.summon");
+            // Get hatched dragon info
+            String dragonName = databaseManager.getDragonName(eggId);
+            String dragonType = databaseManager.getDragonType(eggId);
+            nameAndTypeText = DragonUtils.getColorByType(dragonType) + dragonName;
         } else if (isIncubating) {
             statusText = plugin.getLanguageString("messages.egg.status.incubating");
             instructionText = plugin.getLanguageString("messages.egg.instructions.toStop");
@@ -366,7 +399,7 @@ public class DragonEggManager {
             
             progressText = plugin.getLanguageString("messages.egg.progressFormat", progressPercent); // Use the calculated percentage
 
-        } else { // Not hatched, not incubating
+        } else { // Not hatched, not incubating, not dead
             statusText = plugin.getLanguageString("messages.egg.status.notIncubating");
             instructionText = plugin.getLanguageString("messages.egg.instructions.toStart");
         }
@@ -400,14 +433,27 @@ public class DragonEggManager {
             // {1} = Instruction Text
             // {2} = Progress Text (or empty string)
             // {3} = Owner Name
-            // {4} = Egg ID
+            // {4} = Egg ID (now replaced conditionally)
+            // {5} = Death Information (new placeholder)
             formattedLine = formattedLine.replace("{0}", statusText);
             formattedLine = formattedLine.replace("{1}", instructionText);
             formattedLine = formattedLine.replace("{2}", progressText);
             formattedLine = formattedLine.replace("{3}", ownerName);
-            formattedLine = formattedLine.replace("{4}", eggId); // Use full eggId or shorten if desired
+            
+            // Conditionally replace {4}
+            if (isHatched || isDead) {
+                formattedLine = formattedLine.replace("{4}", nameAndTypeText); // Show Name and Type if hatched or dead
+            } else {
+                formattedLine = formattedLine.replace("{4}", ""); // Hide ID if not hatched
+            }
+            
+            // Replace {5} with death info if available
+            formattedLine = formattedLine.replace("{5}", deathInfoText);
 
-            formattedLore.add(formattedLine); // Color codes are already in the template
+            // Only add non-empty lines (e.g., if {4} was replaced by empty string and the original line was just "{4}")
+            if (!formattedLine.trim().isEmpty()) {
+                formattedLore.add(formattedLine); // Color codes are already in the template
+            }
         }
 
         item.setLore(formattedLore.toArray(new String[0]));
@@ -423,6 +469,14 @@ public class DragonEggManager {
         }
         displayTag.putList(loreListTag);
         item.getNamedTag().putCompound("display", displayTag);
+        
+        // For dead dragons, update the appearance of the egg item
+        if (isDead) {
+            // Set a custom color to the egg item (darker or reddish)
+            // This is a visual indicator that the dragon is dead
+            item.setCustomName(TextFormat.RED + "Dead Dragon Egg: " + 
+                TextFormat.RESET + databaseManager.getDragonName(eggId));
+        }
     }
 
     /**

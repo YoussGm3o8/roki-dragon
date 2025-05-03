@@ -95,10 +95,28 @@ public class DragonManager {
         plugin.getLogger().info("Attempting to create dragon entity with NBT data");
         
         // Create and spawn the dragon entity
-        // Create the dragon entity using Nukkit's method
         Entity entity = null;
         try {
-            entity = Entity.createEntity("Dragon", chunk, nbt);
+            // Determine the correct entity identifier based on type
+            String entityIdentifier;
+            switch (dragonType) {
+                case "Fire Dragon":
+                    entityIdentifier = "roki:fire_dragon";
+                    break;
+                case "Ice Dragon":
+                    entityIdentifier = "roki:ice_dragon";
+                    break;
+                case "Lightning Dragon":
+                    entityIdentifier = "roki:lightning_dragon";
+                    break;
+                default:
+                    plugin.getLogger().warning("Unknown dragonType '" + dragonType + "' during spawn. Defaulting to fire.");
+                    entityIdentifier = "roki:fire_dragon"; // Default if type is unknown
+                    break;
+            }
+            plugin.getLogger().info("Using entity identifier: " + entityIdentifier);
+            
+            entity = Entity.createEntity(entityIdentifier, chunk, nbt);
             plugin.getLogger().info("Entity created: " + (entity != null ? entity.getClass().getName() : "null"));
         } catch (Exception e) {
             plugin.getLogger().error("Exception creating dragon entity: " + e.getMessage());

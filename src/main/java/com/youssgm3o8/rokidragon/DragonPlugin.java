@@ -71,8 +71,12 @@ public class DragonPlugin extends PluginBase implements Listener {
      */
     @Override
     public void onLoad() {
-        // Register the dragon entity type
-        EntityManager.get().registerDefinition(DragonEntity.DEFINITION);
+        // Register all dragon entity type definitions
+        EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Fire Dragon"));
+        EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Ice Dragon"));
+        EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Lightning Dragon"));
+        
+        getLogger().info("Registered all dragon entity definitions");
     }
 
     /**
@@ -129,8 +133,13 @@ public class DragonPlugin extends PluginBase implements Listener {
         // Register entity types - this is critical for proper entity spawning
         try {
             // Register the Dragon entity with its proper name
-            Entity.registerEntity("Dragon", DragonEntity.class);
-            getLogger().info("Successfully registered Dragon entity");
+            // Entity.registerEntity("Dragon", DragonEntity.class);
+            
+            // Register the specific dragon types from the resource pack
+            Entity.registerEntity("roki:fire_dragon", DragonEntity.class);
+            Entity.registerEntity("roki:ice_dragon", DragonEntity.class);
+            Entity.registerEntity("roki:lightning_dragon", DragonEntity.class);
+            getLogger().info("Successfully registered RokiDragon entity types");
             
             // Register projectile entities
             Entity.registerEntity("EntityBedFireBall", EntityBedFireBall.class);
@@ -546,7 +555,7 @@ public class DragonPlugin extends PluginBase implements Listener {
                         databaseManager.updateIncubationStartTime(eggId, System.currentTimeMillis() / 1000);
                         
                         getLogger().info("Resumed incubation for egg " + eggId + " for player " + player.getName());
-                        player.sendMessage(TextFormat.AQUA + getLanguageString("messages.incubationResumed"));
+                        player.sendMessage(TextFormat.AQUA + getLanguageString("messages.success.incubationResumed"));
                     }
                 }
             }

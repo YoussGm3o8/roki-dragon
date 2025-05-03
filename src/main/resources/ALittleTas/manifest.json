@@ -1,0 +1,18 @@
+{
+    "format_version": 1,
+    "header": {
+        "description": "A Little Taste of Jerm Bedrock Edition V2.0",
+        "name": "A Little Taste of Jerm",
+        "uuid": "75d1c728-40d7-4e3a-9af0-1ed01ae35445",
+        "version": [0, 0, 1],
+        "min_engine_version": [1, 2, 6]
+    },
+    "modules": [
+        {
+            "description": "A Little Taste of Jerm Bedrock Edition V2.0",
+            "type": "resources",
+            "uuid": "f934792a-b3cd-42b2-bf20-efb57af1eab3",
+            "version": [0, 0, 1]
+        }
+    ]
+}

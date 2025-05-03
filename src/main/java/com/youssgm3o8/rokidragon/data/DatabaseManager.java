@@ -68,8 +68,57 @@ public class DatabaseManager {
                              "incubating INTEGER DEFAULT 0, " +
                              "incubationProgress INTEGER DEFAULT 0, " +
                              "incubationStartTime INTEGER DEFAULT 0, " +
-                             "purchaseDate INTEGER)");
+                             "purchaseDate INTEGER, " +
+                             "isDead INTEGER DEFAULT 0, " +
+                             "killedBy TEXT, " +
+                             "deathTime INTEGER, " +
+                             "deathLocation TEXT)");
                 plugin.getLogger().info("Table 'dragon_eggs' created/verified.");
+
+                // Check if death-related columns exist, add them if not
+                try {
+                    ResultSet rs = stmt.executeQuery("PRAGMA table_info(dragon_eggs)");
+                    boolean hasIsDead = false;
+                    boolean hasKilledBy = false;
+                    boolean hasDeathTime = false;
+                    boolean hasDeathLocation = false;
+                    
+                    while (rs.next()) {
+                        String columnName = rs.getString("name");
+                        if ("isDead".equalsIgnoreCase(columnName)) {
+                            hasIsDead = true;
+                        } else if ("killedBy".equalsIgnoreCase(columnName)) {
+                            hasKilledBy = true;
+                        } else if ("deathTime".equalsIgnoreCase(columnName)) {
+                            hasDeathTime = true;
+                        } else if ("deathLocation".equalsIgnoreCase(columnName)) {
+                            hasDeathLocation = true;
+                        }
+                    }
+                    
+                    if (!hasIsDead) {
+                        plugin.getLogger().info("Adding isDead column to dragon_eggs table...");
+                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN isDead INTEGER DEFAULT 0");
+                    }
+                    
+                    if (!hasKilledBy) {
+                        plugin.getLogger().info("Adding killedBy column to dragon_eggs table...");
+                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN killedBy TEXT");
+                    }
+                    
+                    if (!hasDeathTime) {
+                        plugin.getLogger().info("Adding deathTime column to dragon_eggs table...");
+                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathTime INTEGER");
+                    }
+                    
+                    if (!hasDeathLocation) {
+                        plugin.getLogger().info("Adding deathLocation column to dragon_eggs table...");
+                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathLocation TEXT");
+                    }
+                    
+                } catch (SQLException e) {
+                    plugin.getLogger().error("Error checking/adding death columns: " + e.getMessage(), e);
+                }
 
                 // Check if incubationStartTime column exists, add it if not
                 try {
@@ -210,6 +259,7 @@ public class DatabaseManager {
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     String type = rs.getString("dragonType");
+                    plugin.getLogger().info("[DB Debug] getDragonType for eggId " + eggId + " found type: " + type);
                     // Return default if null or empty
                     return (type == null || type.trim().isEmpty()) ? "Fire Dragon" : type;
                 }
@@ -217,6 +267,7 @@ public class DatabaseManager {
         } catch (SQLException e) {
             plugin.getLogger().error("Error getting dragon type: " + e.getMessage(), e);
         }
+        plugin.getLogger().warning("[DB Debug] getDragonType for eggId " + eggId + " did not find entry or had error, returning default.");
         return "Fire Dragon"; // Default if not found or error
     }
 
@@ -640,7 +691,7 @@ public class DatabaseManager {
     }
 
     public int getPlayerStoredEggCount(UUID uuid) {
-        String sql = "SELECT COUNT(*) FROM stored_eggs WHERE playerUUID = ?";
+        String sql = "SELECT COUNT(*) FROM stored_eggs s JOIN dragon_eggs d ON s.eggId = d.eggId WHERE s.playerUUID = ? AND (d.isDead IS NULL OR d.isDead = 0)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, uuid.toString());
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -799,61 +850,42 @@ public class DatabaseManager {
     /**
      * Get all eggs for a player (active, stored, and purchased eggs)
      * 
-     * @param playerName The name of the player
+     * @param playerUUIDString The UUID string of the player
      * @return A list of maps containing egg information
      */
-    public List<Map<String, Object>> getAllEggsForPlayer(String playerName) {
-        // Convert player name to UUID (implement this if you store players by name)
-        // For now, we'll assume playerName is UUID string
-        String playerUUID = playerName; // Adjust as needed for your implementation
+    public List<Map<String, Object>> getAllEggsForPlayer(String playerUUIDString) {
+        if (playerUUIDString == null || playerUUIDString.trim().isEmpty()) {
+            plugin.getLogger().warning("Attempted to get all eggs with null or empty UUID string.");
+            return new ArrayList<>();
+        }
         
         List<Map<String, Object>> result = new ArrayList<>();
         
-        // Get all eggs owned by this player, regardless of status
-        String sql = "SELECT de.eggId, de.dragonType, de.dragonName, " +
-                    "(CASE WHEN d.dragonEgg_id = de.eggId THEN 1 ELSE 0 END) as is_active " +
-                    "FROM dragon_eggs de " +
-                    "LEFT JOIN dragons d ON de.eggId = d.dragonEgg_id AND d.playerUUID = ? " +
-                    "WHERE de.playerUUID = ?";
+        // Get all eggs owned by this player from the dragon_eggs table
+        String sql = "SELECT eggId, dragonType, dragonName, hatched, incubating " +
+                    "FROM dragon_eggs " +
+                    "WHERE playerUUID = ?";
                     
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, playerUUID);
-            pstmt.setString(2, playerUUID);
+            pstmt.setString(1, playerUUIDString);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> eggData = new HashMap<>();
-                    eggData.put("id", rs.getString("eggId"));
+                    String eggId = rs.getString("eggId");
+                    eggData.put("egg_id", eggId); // Use consistent key "egg_id"
                     eggData.put("type", rs.getString("dragonType"));
                     eggData.put("name", rs.getString("dragonName"));
-                    eggData.put("is_active", rs.getInt("is_active") == 1);
+                    eggData.put("is_hatched", rs.getInt("hatched") == 1);
+                    // Note: 'is_active' status will be determined in the GUI logic now
                     result.add(eggData);
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().error("Error getting all eggs: " + e.getMessage(), e);
+            plugin.getLogger().error("Error getting all eggs for player UUID " + playerUUIDString + ": " + e.getMessage(), e);
         }
         
-        // Also get eggs from storage
-        String storageSql = "SELECT se.eggId, de.dragonType, de.dragonName " +
-                          "FROM stored_eggs se " +
-                          "JOIN dragon_eggs de ON se.eggId = de.eggId " +
-                          "WHERE se.playerUUID = ?";
-                  
-        try (PreparedStatement pstmt = connection.prepareStatement(storageSql)) {
-            pstmt.setString(1, playerUUID);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> eggData = new HashMap<>();
-                    eggData.put("id", rs.getString("eggId"));
-                    eggData.put("type", rs.getString("dragonType"));
-                    eggData.put("name", rs.getString("dragonName"));
-                    eggData.put("is_active", false);  // Stored eggs are never active
-                    result.add(eggData);
-                }
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().error("Error getting stored eggs: " + e.getMessage(), e);
-        }
+        // Removed separate query for stored_eggs as dragon_eggs should be the primary source of ownership.
+        // Storage status can be checked elsewhere if needed.
         
         return result;
     }
@@ -1428,5 +1460,277 @@ public class DatabaseManager {
             plugin.getLogger().error("Error getting egg incubation start time: " + e.getMessage(), e);
         }
         return 0;
+    }
+
+    /**
+     * Check if player has a specific metadata key
+     * 
+     * @param playerUUID The UUID of the player
+     * @param key The metadata key to check
+     * @return true if the metadata key exists for the player
+     */
+    public boolean hasPlayerMetadata(String playerUUID, String key) {
+        // First, ensure the player_metadata table exists
+        createPlayerMetadataTableIfNotExists();
+        
+        String sql = "SELECT COUNT(*) FROM player_metadata WHERE playerUUID = ? AND meta_key = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, playerUUID);
+            pstmt.setString(2, key);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error checking player metadata: " + e.getMessage(), e);
+        }
+        return false;
+    }
+
+    /**
+     * Set a metadata value for a player
+     * 
+     * @param playerUUID The UUID of the player
+     * @param key The metadata key
+     * @param value The metadata value
+     * @return true if the metadata was set successfully
+     */
+    public boolean setPlayerMetadata(String playerUUID, String key, String value) {
+        // First, ensure the player_metadata table exists
+        createPlayerMetadataTableIfNotExists();
+        
+        // Check if the key already exists for this player
+        if (hasPlayerMetadata(playerUUID, key)) {
+            // Update existing record
+            String sql = "UPDATE player_metadata SET meta_value = ? WHERE playerUUID = ? AND meta_key = ?";
+            try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                pstmt.setString(1, value);
+                pstmt.setString(2, playerUUID);
+                pstmt.setString(3, key);
+                int affected = pstmt.executeUpdate();
+                return affected > 0;
+            } catch (SQLException e) {
+                plugin.getLogger().error("Error updating player metadata: " + e.getMessage(), e);
+                return false;
+            }
+        } else {
+            // Insert new record
+            String sql = "INSERT INTO player_metadata (playerUUID, meta_key, meta_value) VALUES (?, ?, ?)";
+            try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                pstmt.setString(1, playerUUID);
+                pstmt.setString(2, key);
+                pstmt.setString(3, value);
+                int affected = pstmt.executeUpdate();
+                return affected > 0;
+            } catch (SQLException e) {
+                plugin.getLogger().error("Error inserting player metadata: " + e.getMessage(), e);
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Get a metadata value for a player
+     * 
+     * @param playerUUID The UUID of the player
+     * @param key The metadata key
+     * @return The metadata value, or null if not found
+     */
+    public String getPlayerMetadata(String playerUUID, String key) {
+        // First, ensure the player_metadata table exists
+        createPlayerMetadataTableIfNotExists();
+        
+        String sql = "SELECT meta_value FROM player_metadata WHERE playerUUID = ? AND meta_key = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, playerUUID);
+            pstmt.setString(2, key);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("meta_value");
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error getting player metadata: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
+    /**
+     * Create the player_metadata table if it doesn't exist
+     */
+    private void createPlayerMetadataTableIfNotExists() {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("CREATE TABLE IF NOT EXISTS player_metadata (" +
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "playerUUID TEXT NOT NULL, " +
+                         "meta_key TEXT NOT NULL, " +
+                         "meta_value TEXT, " +
+                         "UNIQUE(playerUUID, meta_key))");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_metadata_playerUUID ON player_metadata(playerUUID)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_metadata_key ON player_metadata(meta_key)");
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error creating player_metadata table: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Marks a dragon as dead in the database
+     * 
+     * @param eggId The ID of the egg/dragon
+     * @param killedBy Who or what killed the dragon (entity name or "unknown")
+     * @param deathLocation Location where the dragon died
+     * @return true if successfully marked as dead
+     */
+    public boolean markDragonAsDead(String eggId, String killedBy, String deathLocation) {
+        String sql = "UPDATE dragon_eggs SET isDead = 1, killedBy = ?, deathTime = ?, deathLocation = ? WHERE eggId = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            long currentTime = System.currentTimeMillis() / 1000; // Unix timestamp in seconds
+            pstmt.setString(1, killedBy);
+            pstmt.setLong(2, currentTime);
+            pstmt.setString(3, deathLocation);
+            pstmt.setString(4, eggId);
+            
+            int updated = pstmt.executeUpdate();
+            return updated > 0;
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error marking dragon as dead: " + e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    /**
+     * Checks if a dragon is dead
+     * 
+     * @param eggId The ID of the egg/dragon
+     * @return true if the dragon is marked as dead
+     */
+    public boolean isDragonDead(String eggId) {
+        String sql = "SELECT isDead FROM dragon_eggs WHERE eggId = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, eggId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("isDead") == 1;
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error checking if dragon is dead: " + e.getMessage(), e);
+        }
+        return false;
+    }
+    
+    /**
+     * Gets death information for a dragon
+     * 
+     * @param eggId The ID of the egg/dragon
+     * @return Map with death details or null if not found/dead
+     */
+    public Map<String, Object> getDragonDeathInfo(String eggId) {
+        String sql = "SELECT killedBy, deathTime, deathLocation FROM dragon_eggs WHERE eggId = ? AND isDead = 1";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, eggId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    Map<String, Object> deathInfo = new HashMap<>();
+                    deathInfo.put("killedBy", rs.getString("killedBy"));
+                    
+                    // Format the death time as a readable date
+                    long deathTime = rs.getLong("deathTime");
+                    String formattedDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(deathTime * 1000));
+                    deathInfo.put("deathTime", formattedDate);
+                    
+                    deathInfo.put("deathLocation", rs.getString("deathLocation"));
+                    return deathInfo;
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error getting dragon death info: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
+    /**
+     * Gets the count of dead dragons a player has in storage
+     * 
+     * @param uuid The UUID of the player
+     * @return The count of dead dragons in storage
+     */
+    public int getDeadDragonCount(UUID uuid) {
+        String sql = "SELECT COUNT(*) FROM stored_eggs s JOIN dragon_eggs d ON s.eggId = d.eggId WHERE s.playerUUID = ? AND d.isDead = 1";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, uuid.toString());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error getting dead dragon count: " + e.getMessage(), e);
+        }
+        return 0;
+    }
+
+    /**
+     * Checks if a dragon egg exists in the database
+     * @param eggId The egg ID to check
+     * @return true if the egg exists, false if not
+     */
+    public boolean doesEggExist(String eggId) {
+        final String sql = "SELECT COUNT(*) FROM dragon_eggs WHERE eggId = ?";
+        
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            
+            statement.setString(1, eggId);
+            ResultSet resultSet = statement.executeQuery();
+            
+            if (resultSet.next()) {
+                return resultSet.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Error checking if egg exists: " + e.getMessage());
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Checks if a dragon egg is owned by a specific player
+     * @param eggId The egg ID to check
+     * @param playerUuid The player UUID to verify as owner
+     * @return true if the player owns the egg, false if not
+     */
+    public boolean isEggOwnedByPlayer(String eggId, String playerUuid) {
+        final String sql = "SELECT COUNT(*) FROM dragon_eggs WHERE eggId = ? AND playerUUID = ?";
+        
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            
+            statement.setString(1, eggId);
+            statement.setString(2, playerUuid);
+            ResultSet resultSet = statement.executeQuery();
+            
+            if (resultSet.next()) {
+                return resultSet.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Error checking egg ownership: " + e.getMessage());
+        }
+        
+        return false;
+    }
+
+    /**
+     * Gets a connection to the database.
+     * @return a connection to the database
+     * @throws SQLException if a database access error occurs
+     */
+    private Connection getConnection() throws SQLException {
+        // Use the existing connection or create a new one if needed
+        if (connection == null || connection.isClosed()) {
+            connection = DriverManager.getConnection(dbUrl);
+        }
+        return connection;
     }
 } 

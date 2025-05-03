@@ -58,27 +58,39 @@ public class LanguageManager {
         // Try to get from cache first
         String value = cachedStrings.get(key);
         
+        // *** ADDED LOGGING ***
+        String source = "cache"; // Track where the value came from
+        // *** END LOGGING ***
+
         // If not in cache, get from config and cache it
         if (value == null) {
+            // *** ADDED LOGGING ***
+            plugin.getLogger().info("[LangManager Debug] Key '" + key + "' not found in cache. Querying languageConfig.");
+            source = "config"; // Update source
+            // *** END LOGGING ***
+
             value = languageConfig.getString(key, key);
             cachedStrings.put(key, value);
+
+            // *** ADDED LOGGING ***
+            plugin.getLogger().info("[LangManager Debug] Value from languageConfig.getString for key '" + key + "': '" + value + "'. Caching it.");
+            // *** END LOGGING ***
         }
 
         if (debugMode) {
-            plugin.getLogger().info("Language result for '" + key + "': '" + value + "'");
+            plugin.getLogger().info("Language result for '" + key + "': '" + value + "' (Source: " + source + ")");
         }
         
         // Format the string with the provided parameters
         if (params.length > 0) {
             try {
-                value = MessageFormat.format(value, params);
-            } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Error formatting language string for key: " + key);
-                plugin.getLogger().warning("Error: " + e.getMessage());
-                // Fall back to simple replacement if MessageFormat fails
+                // Use our own simple replacement instead of MessageFormat to avoid formatting issues
                 for (int i = 0; i < params.length; i++) {
                     value = value.replace("{" + i + "}", String.valueOf(params[i]));
                 }
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error formatting language string for key: " + key);
+                plugin.getLogger().warning("Error: " + e.getMessage());
             }
         }
         

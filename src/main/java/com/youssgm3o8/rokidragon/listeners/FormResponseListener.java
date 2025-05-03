@@ -76,6 +76,7 @@ public class FormResponseListener implements Listener {
                formId == FormBasedDragonGUI.FORM_CUSTOMIZATION_ERROR ||
                formId == FormBasedDragonGUI.FORM_PURCHASE_RESULT ||
                formId == FormBasedDragonGUI.FORM_PURCHASE_ERROR ||
-               formId == FormBasedDragonGUI.FORM_INVENTORY_STORAGE;
+               formId == FormBasedDragonGUI.FORM_INVENTORY_STORAGE ||
+               formId == FormBasedDragonGUI.FORM_FIRST_NAMING;
     }
 } 
