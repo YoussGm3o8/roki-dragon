@@ -179,9 +179,17 @@ messages:
     type: "§eType: §f{0}" # Added color codes, {0} will include type color
     health: "§eHealth: §c{0} §7/ §c{1}" # Added key
     notSummoned: "§7Dragon is not currently summoned." # Added key
-    dragonFullHealth: "§a{0}§a is already at full health!" # Moved back from info
     playerOverate: "§eThe Dragon Loaf is incredibly filling... maybe too filling." # Added color code
     useShiftClickToIncubate: "§eUse §bShift + Right-Click§e to incubate your dragon egg." # Added missing message
+    newPlayer: "§eWelcome to DragonWorld! Purchase your first dragon egg with §a/dragon buy§e." # Added color codes
+    cooldownGlobal: "§cPlease wait §e{0}§c seconds before using this command again."
+    adminCooldownExempt: "§7(Admin cooldown exempt)" # New message for admins
+    dragonFullHealth: "§e{0}§e is already at full health!" # Message for when dragon is at full health
+    declinedPurchase: "§eDragon egg purchase declined."
+    # Added countdown message lines
+    incubationTime: "§eHatching takes §a{0} minutes§e of active incubation time."
+    incubationCounter: "§eTotal incubation time remaining: §a{0} minutes§e."
+    dragonExplained: "§eYour dragon can breathe fire! §aRight-Click§e while riding!"
 
   logs: # Section for /dragonlogs command
     helpTitle: "§e=== Dragon Logs Commands ==="

@@ -4,9 +4,7 @@ import cn.nukkit.Player;
 import cn.nukkit.command.PluginCommand;
 import cn.nukkit.entity.Entity;
 import cn.nukkit.entity.custom.EntityManager;
-import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
-import cn.nukkit.event.player.PlayerFormRespondedEvent;
 import cn.nukkit.item.Item;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.plugin.PluginBase;
@@ -26,14 +24,11 @@ import com.youssgm3o8.rokidragon.commands.DragonLogsCommandExecutor;
 import com.youssgm3o8.rokidragon.entities.EntityBedFireBall;
 import com.youssgm3o8.rokidragon.entities.EntityIceBall;
 import com.youssgm3o8.rokidragon.entities.EntityLightningBall;
+import com.youssgm3o8.rokidragon.entities.EntityWaterBall;
+import com.youssgm3o8.rokidragon.entities.EntityEarthBall;
 import com.youssgm3o8.rokidragon.listeners.EventListenerEdit;
 import com.youssgm3o8.rokidragon.listeners.DragonEggListener;
 import com.youssgm3o8.rokidragon.listeners.FormResponseListener;
-import cn.nukkit.inventory.CraftingManager;
-import java.util.List;
-
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -75,6 +70,8 @@ public class DragonPlugin extends PluginBase implements Listener {
         EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Fire Dragon"));
         EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Ice Dragon"));
         EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Lightning Dragon"));
+        EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Water Dragon"));
+        EntityManager.get().registerDefinition(DragonEntity.getDefinitionForType("Earth Dragon"));
         
         getLogger().info("Registered all dragon entity definitions");
     }
@@ -104,6 +101,14 @@ public class DragonPlugin extends PluginBase implements Listener {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        
+        // Set default stats for DragonEntity from config
+        int maxHealth = config.getInt("dragon_stats.max_health", 100);
+        double baseDamage = config.getDouble("dragon_stats.base_damage", 15.0);
+        double damageReduction = config.getDouble("dragon_stats.damage_reduction", 0.25);
+        DragonEntity.setDefaultStats(maxHealth, baseDamage, damageReduction);
+        getLogger().info("Loaded dragon stats from config: Health=" + maxHealth + 
+                         ", Damage=" + baseDamage + ", Reduction=" + damageReduction);
         
         // Register managers
         this.dragonManager = new DragonManager(this);
@@ -139,12 +144,16 @@ public class DragonPlugin extends PluginBase implements Listener {
             Entity.registerEntity("roki:fire_dragon", DragonEntity.class);
             Entity.registerEntity("roki:ice_dragon", DragonEntity.class);
             Entity.registerEntity("roki:lightning_dragon", DragonEntity.class);
+            Entity.registerEntity("roki:water_dragon", DragonEntity.class);
+            Entity.registerEntity("roki:earth_dragon", DragonEntity.class);
             getLogger().info("Successfully registered RokiDragon entity types");
             
             // Register projectile entities
             Entity.registerEntity("EntityBedFireBall", EntityBedFireBall.class);
             Entity.registerEntity("EntityIceBall", EntityIceBall.class);
             Entity.registerEntity("EntityLightningBall", EntityLightningBall.class);
+            Entity.registerEntity("EntityWaterBall", EntityWaterBall.class);
+            Entity.registerEntity("EntityEarthBall", EntityEarthBall.class);
             
             getLogger().info("All entities registered successfully");
         } catch (Exception e) {
@@ -159,6 +168,12 @@ public class DragonPlugin extends PluginBase implements Listener {
 
         // Schedule cooldown map cleanup task (runs every 5 minutes)
         getServer().getScheduler().scheduleRepeatingTask(this, this::cleanupCooldownMap, 5 * 60 * 20);
+        
+        // Save default config
+        this.saveDefaultConfig();
+        
+        // Ensure the config has all required default values
+        initializeDefaultConfig();
         
         getLogger().info("RokiDragon plugin has been enabled!");
     }
@@ -346,6 +361,14 @@ public class DragonPlugin extends PluginBase implements Listener {
                 getLogger().info("Dismounting passengers before despawning dragon for " + player.getName());
                 dragon.dismountAllPassengers(); // Use the existing method in DragonEntity
                 
+                // Save the dragon's health to the database
+                String eggId = dragon.getDragonId();
+                if (eggId != null) {
+                    float currentHealth = dragon.getPluginHealth();
+                    getLogger().info("Saving dragon health for " + player.getName() + ": " + currentHealth);
+                    databaseManager.saveDragonHealth(eggId, currentHealth);
+                }
+                
                 // Now close the dragon entity
                 dragon.close();
                 getLogger().info("Closed dragon entity for " + player.getName());
@@ -440,11 +463,11 @@ public class DragonPlugin extends PluginBase implements Listener {
     }
 
     /**
-     * Gets the map of currently active (spawned) dragons, keyed by owner UUID.
-     * @return A map of active DragonEntity instances.
+     * Gets the map of currently active dragons
+     * @return Map of player UUID to DragonEntity
      */
     public Map<UUID, DragonEntity> getActiveDragons() {
-        return activeDragons;
+        return this.activeDragons;
     }
 
     /**
@@ -559,6 +582,62 @@ public class DragonPlugin extends PluginBase implements Listener {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Initialize default config values for all settings used in the plugin
+     */
+    private void initializeDefaultConfig() {
+        Config config = this.getConfig();
+        
+        // Dragon stats
+        setDefaultIfMissing(config, "dragon_stats.max_health", 100);
+        setDefaultIfMissing(config, "dragon_stats.base_damage", 15.0);
+        setDefaultIfMissing(config, "dragon_stats.damage_reduction", 0.25);
+        setDefaultIfMissing(config, "dragon_stats.move_speed", 1.8);
+        setDefaultIfMissing(config, "dragon_stats.max_speed", 0.92);
+        setDefaultIfMissing(config, "dragon_stats.ice_dragon_fire_vulnerability", 1.5);
+        
+        // Flight physics constants
+        setDefaultIfMissing(config, "flight_physics.acceleration_rate", 0.08);
+        setDefaultIfMissing(config, "flight_physics.drag_coefficient", 0.025);
+        setDefaultIfMissing(config, "flight_physics.gravity_accel", 0.04);
+        setDefaultIfMissing(config, "flight_physics.dive_accel_multiplier", 1.2);
+        setDefaultIfMissing(config, "flight_physics.lift_coefficient", 0.05);
+        setDefaultIfMissing(config, "flight_physics.max_vertical_speed_up", 1.0);
+        setDefaultIfMissing(config, "flight_physics.max_vertical_speed_down", -2.0);
+        setDefaultIfMissing(config, "flight_physics.min_lift_speed", 0.2);
+        setDefaultIfMissing(config, "flight_physics.flat_flight_speed_multiplier", 1.5);
+        setDefaultIfMissing(config, "flight_physics.pitch_threshold_down", 20);
+        setDefaultIfMissing(config, "flight_physics.pitch_threshold_flat", 15);
+        setDefaultIfMissing(config, "flight_physics.pitch_threshold_up", -20);
+        
+        // Timing settings
+        setDefaultIfMissing(config, "timing.cooldowns.ability_milliseconds", 500);
+        setDefaultIfMissing(config, "timing.cooldowns.summon_seconds", 30);
+        setDefaultIfMissing(config, "timing.despawn_delay_seconds", 300);
+        
+        // Dragon settings
+        setDefaultIfMissing(config, "dragon_settings.dismount_resistance_duration_ticks", 100); // 5 seconds
+        setDefaultIfMissing(config, "dragon_settings.dismount_resistance_amplifier", 254); // Maximum resistance
+        setDefaultIfMissing(config, "dragon_settings.min_name_length", 3);
+        setDefaultIfMissing(config, "dragon_settings.max_name_length", 16);
+        
+        // Visual settings
+        setDefaultIfMissing(config, "visual.particle_effect_interval_ticks", 5);
+        setDefaultIfMissing(config, "visual.death_particle_count", 20);
+        
+        // Save any changes
+        this.saveConfig();
+    }
+    
+    /**
+     * Set a default value in the config if the key doesn't exist
+     */
+    private void setDefaultIfMissing(Config config, String path, Object defaultValue) {
+        if (!config.exists(path)) {
+            config.set(path, defaultValue);
         }
     }
 

@@ -30,19 +30,11 @@ public class DragonLoafManager {
      * Creates multiple recipes based on allowed meat/fish ingredients.
      */
     private void registerLoafRecipes() { // Make private, rename for clarity
-        CraftingManager craftingManager = plugin.getServer().getCraftingManager();
-        
         plugin.getLogger().info("Registering Dragon Loaf recipes...");
-        // Create the result item using its constructor, which handles NBT, name, and lore
-        Item dragonLoafResult = new ItemDragonLoaf(plugin).clone(); 
-
-        // Define the shape
-        String[] loafShape = {
-            "WWW",
-            "MMM",
-            "WWW"
-        };
-
+        
+        // Get the crafting manager instance once
+        cn.nukkit.inventory.CraftingManager craftingManager = plugin.getServer().getCraftingManager();
+        
         // Define the allowed middle ingredients
         List<Item> middleIngredients = List.of(
             Item.get(Item.COOKED_BEEF),
@@ -53,9 +45,19 @@ public class DragonLoafManager {
             Item.get(Item.RAW_FISH)   // Use RAW_FISH for raw cod/salmon
         );
 
+        // Define the shape
+        String[] loafShape = {
+            "WWW",
+            "MMM",
+            "WWW"
+        };
+
         // Register a shaped recipe for each allowed middle ingredient
         int recipeCount = 0;
         for (Item middleItem : middleIngredients) {
+            // Create a fresh result item for each recipe to avoid NBT issues
+            Item dragonLoafResult = new ItemDragonLoaf(plugin).clone();
+            
             Map<Character, Item> ingredients = new HashMap<>();
             ingredients.put('W', Item.get(Item.WHEAT));
             ingredients.put('M', middleItem); // Set the middle ingredient
@@ -67,18 +69,18 @@ public class DragonLoafManager {
                     ingredients,
                     new ArrayList<>()
                 );
-                // Nukkit handles recipe identification implicitly
+                // Register with the crafting manager
                 craftingManager.registerRecipe(loafRecipe);
                 recipeCount++;
             } catch (Exception e) {
                  plugin.getLogger().error("Failed to register Dragon Loaf recipe for middle item: " + middleItem.getName(), e);
             }
         }
-        plugin.getLogger().info("Registered " + recipeCount + " Dragon Loaf SHAPED crafting recipes.");
         
-        // Optional: Rebuild packet if recipes don't show up immediately, 
-        // but often calling registerRecipe multiple times handles it.
-        // craftingManager.rebuildPacket(); 
+        // Rebuild the crafting data packet to ensure clients receive updated recipes
+        craftingManager.rebuildPacket();
+        
+        plugin.getLogger().info("Registered " + recipeCount + " Dragon Loaf SHAPED crafting recipes.");
     }
 
     // Note: Logic for using/consuming the loaf remains in EventListenerEdit as it involves player/entity events.

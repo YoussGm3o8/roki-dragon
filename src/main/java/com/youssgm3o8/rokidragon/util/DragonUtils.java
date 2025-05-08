@@ -24,6 +24,10 @@ public class DragonUtils {
                 return TextFormat.AQUA.toString();
             case "Lightning Dragon":
                 return TextFormat.YELLOW.toString();
+            case "Water Dragon":
+                return TextFormat.BLUE.toString();
+            case "Earth Dragon":
+                return TextFormat.GREEN.toString();
             default:
                 return TextFormat.WHITE.toString();
         }

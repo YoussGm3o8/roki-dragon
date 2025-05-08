@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.text.MessageFormat;
 
 /**
  * Handles dragon management using Nukkit forms instead of fake inventories.
@@ -162,25 +163,32 @@ public class FormBasedDragonGUI {
             if (eggManager.isDragonEgg(item)) {
                 plugin.getLogger().info("[Storage Check] Found potential egg in slot " + slot + ": " + item.getName());
 
-                // --- Robust Egg ID Check ---
+                // Robust Egg ID retrieval
                 String eggId = null;
-                UUID eggUUID = eggManager.getDragonUUID(item); // Use helper to check multiple tags
-                if (eggUUID != null) {
-                    eggId = eggUUID.toString();
-                    plugin.getLogger().info("[Storage Check] Egg ID found via eggManager.getDragonUUID: " + eggId);
-                } else {
-                    // Fallback check just in case helper missed something or tag is different
-                    CompoundTag tag = item.getNamedTag();
-                    if (tag != null) {
-                        if (tag.contains("eggId")) eggId = tag.getString("eggId");
-                        else if (tag.contains("dragon_egg_id")) eggId = tag.getString("dragon_egg_id");
-                        else if (tag.contains("DragonUUID")) eggId = tag.getString("DragonUUID");
-                        plugin.getLogger().info("[Storage Check] Egg ID found via direct tag check: " + eggId + " (Tag: " + tag.toString() + ")");
-                    } else {
-                        plugin.getLogger().warning("[Storage Check] Egg item in slot " + slot + " has no NBT tag!");
+                CompoundTag tag = item.getNamedTag();
+                
+                // Try all possible tag names
+                if (tag != null) {
+                    if (tag.contains("dragon_egg_id")) {
+                        eggId = tag.getString("dragon_egg_id");
+                        plugin.getLogger().info("[Storage Check] Found egg ID via dragon_egg_id tag: " + eggId);
+                    } else if (tag.contains("eggId")) {
+                        eggId = tag.getString("eggId");
+                        plugin.getLogger().info("[Storage Check] Found egg ID via eggId tag: " + eggId);
+                    } else if (tag.contains("DragonUUID")) {
+                        eggId = tag.getString("DragonUUID");
+                        plugin.getLogger().info("[Storage Check] Found egg ID via DragonUUID tag: " + eggId);
                     }
                 }
-                // --- End Robust Egg ID Check ---
+                
+                // If still null, try using the eggManager
+                if (eggId == null || eggId.isEmpty()) {
+                    UUID eggUUID = eggManager.getDragonUUID(item);
+                    if (eggUUID != null) {
+                        eggId = eggUUID.toString();
+                        plugin.getLogger().info("[Storage Check] Found egg ID via eggManager.getDragonUUID: " + eggId);
+                    }
+                }
 
                 if (eggId != null && !eggId.isEmpty()) {
                     boolean isHatched = databaseManager.isEggHatched(eggId);
@@ -216,7 +224,9 @@ public class FormBasedDragonGUI {
             for (Item eggItem : eggItems) {
                 String dragonType = eggManager.getDragonType(eggItem);
                 String dragonName = eggManager.getDragonName(eggItem);
-                String eggId = eggItem.getNamedTag().getString("dragon_egg_id");
+                // Use the getDragonUUID method for consistent retrieval
+                UUID eggUUID = eggManager.getDragonUUID(eggItem);
+                String eggId = (eggUUID != null) ? eggUUID.toString() : "";
                 
                 int slot = player.getInventory().first(eggItem);
                 form.addButton(new ElementButton(
@@ -305,16 +315,16 @@ public class FormBasedDragonGUI {
 
                 String statusText = "";
                 String statusColor = TextFormat.GRAY.toString();
-                // Use new flat key structure
-                String langKey = "gui.lostEgg.menu.egg_status_egg"; // Default flat key
+                // Use correct key structure with messages prefix
+                String langKey = "messages.lostEgg.menu.egg_status_egg"; // Default key
 
                 if (isActive) {
-                    // Use new flat key structure
-                    langKey = "gui.lostEgg.menu.egg_status_active";
+                    // Use correct key structure
+                    langKey = "messages.lostEgg.menu.egg_status_active";
                     statusColor = TextFormat.AQUA.toString();
                 } else if (isHatched) {
-                    // Use new flat key structure
-                    langKey = "gui.lostEgg.menu.egg_status_hatched";
+                    // Use correct key structure
+                    langKey = "messages.lostEgg.menu.egg_status_hatched";
                     statusColor = TextFormat.GREEN.toString();
                 }
 
@@ -730,90 +740,101 @@ public class FormBasedDragonGUI {
      * Process inventory egg selection for storage
      */
     private void handleInventoryStorageResponse(Player player, int buttonId) {
-        plugin.getLogger().info("Processing inventory storage response for " + player.getName() + " with buttonId " + buttonId);
-        
-        // Count hatched dragon eggs in inventory
-        List<Item> eggItems = new ArrayList<>();
-        for (Item item : player.getInventory().getContents().values()) {
-            if (eggManager.isDragonEgg(item)) {
-                // Only add hatched eggs
-                String eggId = item.getNamedTag().getString("dragon_egg_id");
-                if (eggId != null && !eggId.isEmpty()) {
-                    boolean isHatched = databaseManager.isEggHatched(eggId);
-                    if (isHatched) {
-                        eggItems.add(item);
-                    }
+        // Check if it's a "Store All" button
+        if (buttonId == player.getInventory().getSize()) {
+            plugin.getLogger().info("Player " + player.getName() + " clicked Store All button");
+            
+            // Track the results
+            int storedCount = 0;
+            int skippedCount = 0;
+            List<Item> eggItems = new ArrayList<>();
+            
+            // Find all dragon eggs in the inventory
+            for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
+                Item item = player.getInventory().getItem(slot);
+                if (item != null && eggManager.isDragonEgg(item)) {
+                    eggItems.add(item);
                 }
             }
-        }
-        
-        plugin.getLogger().info("Found " + eggItems.size() + " hatched eggs in inventory for " + player.getName());
-        
-        // Determine last button index (Back button) 
-        boolean hasStoreAllButton = eggItems.size() > 1;
-        
-        // Check if user has enough space for a Store All button
-        List<Map<String, Object>> allEggs = databaseManager.getAllEggsForPlayer(player.getUniqueId().toString());
-        int totalEggs = allEggs.size();
-        int maxEggs = DragonEggManager.MAX_EGGS_PER_PLAYER;
-        int availableSlots = maxEggs - totalEggs;
-        
-        // Store All button is only shown if multiple eggs and enough space
-        hasStoreAllButton = hasStoreAllButton && (availableSlots >= eggItems.size());
-        
-        // Calculate back button index
-        int backButtonIndex = eggItems.size() + (hasStoreAllButton ? 1 : 0);
-        
-        plugin.getLogger().info("Back button index calculated as " + backButtonIndex + " for " + player.getName());
-        
-        // Check if it's the back button (last button)
-        if (buttonId == backButtonIndex) {
-            plugin.getLogger().info("Player " + player.getName() + " clicked Back button");
-            openStorage(player);
-            return;
-        }
-        
-        // Check if we're at the limit
-        if (totalEggs >= maxEggs) {
-            player.sendMessage(TextFormat.RED + "You have reached the maximum limit of " + maxEggs + " dragon eggs.");
-            openStorage(player);
-            return;
-        }
-        
-        // Check if it's the Store All button
-        if (hasStoreAllButton && buttonId == eggItems.size()) {
-            plugin.getLogger().info("Player " + player.getName() + " clicked Store All Hatched Eggs button");
-            int storedCount = 0;
             
-            for (Item eggItem : new ArrayList<>(eggItems)) {
-                if (storedCount >= availableSlots) {
-                    player.sendMessage(TextFormat.YELLOW + "Storage limit reached. Stored " + storedCount + " eggs.");
-                    break;
+            if (eggItems.isEmpty()) {
+                player.sendMessage(TextFormat.YELLOW + "No dragon eggs found in your inventory.");
+                openStorage(player);
+                return;
+            }
+            
+            // Process each egg
+            for (Item eggItem : eggItems) {
+                String eggId = null;
+                CompoundTag tag = eggItem.getNamedTag();
+                
+                // Try all possible tag names
+                if (tag != null) {
+                    if (tag.contains("dragon_egg_id")) {
+                        eggId = tag.getString("dragon_egg_id");
+                    } else if (tag.contains("eggId")) {
+                        eggId = tag.getString("eggId");
+                    } else if (tag.contains("DragonUUID")) {
+                        eggId = tag.getString("DragonUUID");
+                    }
                 }
                 
-                // Only store eggs that player owns
-                String eggId = eggItem.getNamedTag().getString("dragon_egg_id");
+                // If still null, try using the eggManager
                 if (eggId == null || eggId.isEmpty()) {
+                    UUID eggUUID = eggManager.getDragonUUID(eggItem);
+                    if (eggUUID != null) {
+                        eggId = eggUUID.toString();
+                    }
+                }
+                
+                // Skip invalid eggs
+                if (eggId == null || eggId.isEmpty()) {
+                    skippedCount++;
                     continue;
                 }
                 
-                if (databaseManager.storeEgg(player.getName(), eggId)) {
-                    player.getInventory().removeItem(eggItem);
+                // Skip incubating eggs
+                if (databaseManager.isEggIncubating(eggId)) {
+                    skippedCount++;
+                    continue;
+                }
+                
+                // Skip unhatched eggs
+                if (!databaseManager.isEggHatched(eggId)) {
+                    skippedCount++;
+                    continue;
+                }
+                
+                // Store the egg
+                try {
+                    storeEggFromInventory(player, eggItem);
                     storedCount++;
+                } catch (Exception e) {
+                    plugin.getLogger().error("Error storing egg " + eggId + ": " + e.getMessage());
+                    skippedCount++;
                 }
             }
             
+            // Send result message to player
             if (storedCount > 0) {
-                player.sendMessage(TextFormat.GREEN + "Successfully stored " + storedCount + " hatched dragon eggs.");
+                player.sendMessage(TextFormat.GREEN + "Successfully stored " + storedCount + " dragon egg(s).");
+                if (skippedCount > 0) {
+                    player.sendMessage(TextFormat.YELLOW + "Skipped " + skippedCount + " egg(s) that were not valid for storage (unhatched or incubating).");
+                }
             } else {
-                player.sendMessage(TextFormat.RED + "Failed to store any hatched eggs.");
+                player.sendMessage(TextFormat.YELLOW + "No valid eggs were found for storage. Eggs must be hatched and not incubating.");
             }
             
             openStorage(player);
             return;
         }
         
-        // Handle single egg selection
+        // Check if it's the back button (last button)
+        if (buttonId >= player.getInventory().getSize() + 1) {
+            openStorage(player);
+            return;
+        }
+        
         String slotString = playerSelectedEggs.get(player.getName() + "_inv_" + buttonId);
         plugin.getLogger().info("Player " + player.getName() + " clicked button " + buttonId + ", slot mapping: " + slotString);
         
@@ -841,9 +862,45 @@ public class FormBasedDragonGUI {
                 return;
             }
             
+            // Get egg ID using multiple approaches
+            String eggId = null;
+            CompoundTag tag = eggItem.getNamedTag();
+            
+            // Try all possible tag names
+            if (tag != null) {
+                if (tag.contains("dragon_egg_id")) {
+                    eggId = tag.getString("dragon_egg_id");
+                    plugin.getLogger().info("Found egg ID via dragon_egg_id tag: " + eggId);
+                } else if (tag.contains("eggId")) {
+                    eggId = tag.getString("eggId");
+                    plugin.getLogger().info("Found egg ID via eggId tag: " + eggId);
+                } else if (tag.contains("DragonUUID")) {
+                    eggId = tag.getString("DragonUUID");
+                    plugin.getLogger().info("Found egg ID via DragonUUID tag: " + eggId);
+                }
+            }
+            
+            // If still null, try using the eggManager
+            if (eggId == null || eggId.isEmpty()) {
+                UUID eggUUID = eggManager.getDragonUUID(eggItem);
+                if (eggUUID != null) {
+                    eggId = eggUUID.toString();
+                    plugin.getLogger().info("Found egg ID via eggManager.getDragonUUID: " + eggId);
+                }
+            }
+            
+            // Final verification
+            if (eggId == null || eggId.isEmpty()) {
+                player.sendMessage(TextFormat.RED + "Error: Could not identify the dragon egg.");
+                plugin.getLogger().warning("Failed to identify egg ID for player " + player.getName() + " in slot " + slot);
+                openStorage(player);
+                return;
+            }
+            
             // Verify the egg is hatched
-            String eggId = eggItem.getNamedTag().getString("dragon_egg_id");
-            boolean isHatched = (eggId != null && !eggId.isEmpty()) && databaseManager.isEggHatched(eggId);
+            boolean isHatched = databaseManager.isEggHatched(eggId);
+            plugin.getLogger().info("Checking if egg " + eggId + " is hatched: " + isHatched);
+            
             if (!isHatched) {
                 player.sendMessage(TextFormat.RED + "Error: Only hatched dragon eggs can be stored.");
                 openStorage(player);
@@ -854,7 +911,8 @@ public class FormBasedDragonGUI {
             plugin.getLogger().info("Storing hatched egg from slot " + slot + " for " + player.getName());
             storeEggFromInventory(player, eggItem);
             openStorage(player);
-        } catch (NumberFormatException e) {
+        } catch (Exception e) {
+            plugin.getLogger().error("Error handling inventory storage response: " + e.getMessage(), e);
             player.sendMessage(TextFormat.RED + "Error processing egg selection.");
             openStorage(player);
         }
@@ -1091,21 +1149,38 @@ public class FormBasedDragonGUI {
             return;
         }
         
-        // Get egg ID from NBT
-        String eggId = eggItem.getNamedTag().getString("dragon_egg_id");
+        // Get egg ID using multiple approaches
+        String eggId = null;
+        CompoundTag tag = eggItem.getNamedTag();
+        
+        // Try all possible tag names
+        if (tag != null) {
+            if (tag.contains("dragon_egg_id")) {
+                eggId = tag.getString("dragon_egg_id");
+                plugin.getLogger().info("Found egg ID via dragon_egg_id tag: " + eggId);
+            } else if (tag.contains("eggId")) {
+                eggId = tag.getString("eggId");
+                plugin.getLogger().info("Found egg ID via eggId tag: " + eggId);
+            } else if (tag.contains("DragonUUID")) {
+                eggId = tag.getString("DragonUUID");
+                plugin.getLogger().info("Found egg ID via DragonUUID tag: " + eggId);
+            }
+        }
+        
+        // If still null, try using the eggManager
         if (eggId == null || eggId.isEmpty()) {
-            // Try alternate NBT tag names
-            if (eggItem.getNamedTag().contains("eggId")) {
-                eggId = eggItem.getNamedTag().getString("eggId");
-            } else if (eggItem.getNamedTag().contains("DragonUUID")) {
-                eggId = eggItem.getNamedTag().getString("DragonUUID");
+            UUID eggUUID = eggManager.getDragonUUID(eggItem);
+            if (eggUUID != null) {
+                eggId = eggUUID.toString();
+                plugin.getLogger().info("Found egg ID via eggManager.getDragonUUID: " + eggId);
             }
-            
-            if (eggId == null || eggId.isEmpty()) {
-                player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.invalidEgg"));
-                plugin.getLogger().warning("Invalid egg ID for player " + player.getName());
-                return;
-            }
+        }
+        
+        // Final verification
+        if (eggId == null || eggId.isEmpty()) {
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.invalidEgg"));
+            plugin.getLogger().warning("Failed to identify egg ID for player " + player.getName());
+            return;
         }
         
         plugin.getLogger().info("Found valid dragon egg with ID: " + eggId + " for player " + player.getName());
@@ -1152,120 +1227,112 @@ public class FormBasedDragonGUI {
         }
     }
 
+    /**
+     * Opens the first naming form for a newly hatched dragon.
+     * This is shown the first time a player summons a hatched dragon.
+     * @param player The player who owns the dragon
+     * @param eggId The dragon egg ID
+     */
     public void openFirstNamingForm(Player player, String eggId) {
-        String defaultName = databaseManager.getDragonName(eggId);
-        String dragonType = databaseManager.getDragonType(eggId);
+        plugin.getLogger().info("Opening first naming form for egg " + eggId + " and player " + player.getName());
+        
+        // Get dragon type for context
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        if (dragonType == null) {
+            dragonType = "Dragon";
+        }
         String typeColor = DragonUtils.getColorByType(dragonType);
         
-        // *** Restored Original Form ***
-        /* // TEMPORARY: Use a simple form for testing
-        FormWindowSimple simpleForm = new FormWindowSimple(
-            typeColor + "Test Naming Form", 
-            "Does this basic form appear? (Egg ID: " + eggId + ")"
-        );
-        simpleForm.addButton(new ElementButton("Close"));
-        */
-        // *** END TEMPORARY ***
-
-        // Original Custom Form - Restored
-        FormWindowCustom form = new FormWindowCustom(typeColor + "Name Your New Dragon!");
+        // Create custom form for naming
+        FormWindowCustom form = new FormWindowCustom(typeColor + "Name Your " + dragonType);
         
-        form.addElement(new ElementLabel(TextFormat.GREEN + "Congratulations on hatching your " + 
-                                        typeColor + dragonType + TextFormat.GREEN + "!\n" + 
-                                        TextFormat.WHITE + "Give your new companion a name."));
+        // Add dragon type info
+        form.addElement(new ElementLabel("§aYour " + dragonType + " has hatched!\n§eChoose a name for your new companion:"));
         
-        // Dragon name input
-        form.addElement(new ElementInput("Dragon Name", 
-                                       "Enter a name (3-16 chars)", defaultName)); // Use default name placeholder
-
+        // Add text input for name with a default
+        form.addElement(new ElementInput("Dragon Name", "Enter name here...", "Dragon"));
+        
         // Store eggId for response handling
         playerSelectedEggs.put(player.getName() + "_namingEggId", eggId);
         
-        // *** ADDED LOGGING ***
-        plugin.getLogger().info("[Form Debug] Attempting to show FORM_FIRST_NAMING (ID: " + FORM_FIRST_NAMING + ") to player " + player.getName() + " using the CUSTOM form."); // Updated log message
-        try {
-            // Show the CUSTOM form
-            player.showFormWindow(form, FORM_FIRST_NAMING);
-            plugin.getLogger().info("[Form Debug] Successfully called showFormWindow for FORM_FIRST_NAMING (CUSTOM form) for player " + player.getName());
-        } catch (Exception e) {
-            // Use .error() for exceptions with Nukkit's logger
-            plugin.getLogger().error("[Form Debug] Exception occurred while showing FORM_FIRST_NAMING (CUSTOM form) to player " + player.getName() + ": " + e.getMessage(), e);
-        }
-        // *** END LOGGING ***
+        // Show the form
+        player.showFormWindow(form, FORM_FIRST_NAMING);
     }
     
     /**
      * Handle response from the first naming form.
      */
-    private void handleFirstNamingResponse(Player player, FormResponseCustom response) {
-        // Log entry into this specific handler
-        plugin.getLogger().info("[Form Debug] Entering handleFirstNamingResponse for " + player.getName());
-        
-        // Check if response itself is null (should be caught earlier, but double check)
+    public void handleFirstNamingResponse(Player player, FormResponseCustom response) {
         if (response == null) {
-             plugin.getLogger().error("[Form Debug] handleFirstNamingResponse called with null response object! This shouldn't happen if the check in handleFormResponse worked.");
-             player.sendMessage(TextFormat.RED + "Error: Form response was unexpectedly null.");
-             openMainMenu(player);
-             return;
+            player.sendMessage(TextFormat.YELLOW + "You need to name your dragon before summoning it.");
+            return;
         }
         
         String eggId = playerSelectedEggs.remove(player.getName() + "_namingEggId");
-        plugin.getLogger().info("[Form Debug] Naming response: Retrieved eggId='" + eggId + "' for player " + player.getName());
         if (eggId == null) {
             player.sendMessage(TextFormat.RED + "Error: Could not find egg data for naming.");
-            plugin.getLogger().error("[Form Debug] Naming response: eggId was null in playerSelectedEggs for key '" + player.getName() + "_namingEggId'");
-            openMainMenu(player);
             return;
         }
         
-        // Log the raw responses list to see what's available
-        plugin.getLogger().info("[Form Debug] Naming response: Raw responses map = " + response.getResponses());
+        // Get the entered name
+        String name = response.getInputResponse(1);
+        if (name == null || name.trim().isEmpty()) {
+            name = "Dragon"; // Default name if empty
+        }
         
-        String newName = response.getInputResponse(1); // Index 1 corresponds to the ElementInput
-        plugin.getLogger().info("[Form Debug] Naming response: Retrieved newName='" + newName + "' from input index 1.");
-
-        // Validate name length (consider making limits configurable)
-        int minLen = plugin.getConfig().getInt("naming.min_length", 3);
-        int maxLen = plugin.getConfig().getInt("naming.max_length", 16);
-        if (newName == null || newName.trim().isEmpty() || newName.length() < minLen || newName.length() > maxLen) {
-            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.nameLength", minLen, maxLen));
-            // Re-open the naming form
-            openFirstNamingForm(player, eggId); // Re-open form on error
+        // Validate name length
+        int minNameLength = plugin.getConfig().getInt("dragon_settings.min_name_length", 3);
+        int maxNameLength = plugin.getConfig().getInt("dragon_settings.max_name_length", 16);
+        
+        if (name.length() < minNameLength || name.length() > maxNameLength) {
+            player.sendMessage(TextFormat.RED + MessageFormat.format(
+                plugin.getLanguageString("messages.errors.nameLength"),
+                minNameLength, maxNameLength
+            ));
+            // Re-open the form if name is invalid
+            openFirstNamingForm(player, eggId);
             return;
         }
-
-        // Update name in database
-        databaseManager.setDragonName(eggId, newName);
-        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.dragonRenamed", newName));
-
-        // *** ADDED: Explicitly register/update the dragon association BEFORE summoning ***
-        String playerUUID = player.getUniqueId().toString();
-        String currentDragonType = databaseManager.getDragonType(eggId); // Get type again to pass to registerDragon
-        boolean registered = databaseManager.registerDragon(playerUUID, eggId, currentDragonType, newName);
-        if (!registered) {
-            plugin.getLogger().error("Failed to register dragon association in database for player " + player.getName() + " and egg " + eggId);
-            player.sendMessage(TextFormat.RED + "Error associating dragon data. Summoning cancelled.");
-            openMainMenu(player);
-            return;
+        
+        // Update the dragon name in database
+        plugin.getDatabaseManager().setDragonName(eggId, name);
+        player.sendMessage(TextFormat.GREEN + MessageFormat.format(
+            plugin.getLanguageString("messages.success.dragonRenamed"),
+            name
+        ));
+        
+        // Now handle summoning the newly named dragon
+        plugin.getLogger().info("First-time dragon naming completed for " + eggId + ", name: " + name);
+        
+        // Give initial dragon shards as a gift for first hatched dragon
+        String dragonTypeForShards = plugin.getDatabaseManager().getDragonType(eggId);
+        if (dragonTypeForShards != null) {
+            plugin.getShardManager().giveInitialShards(dragonTypeForShards, player);
         }
-        plugin.getLogger().info("[Form Debug] Explicitly registered/updated dragon association for egg " + eggId);
-        // *** END ADDED CODE ***
+        
+        // Now summon the dragon after naming and giving shards
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
 
-        // Give initial shards after naming
-        String dragonType = databaseManager.getDragonType(eggId);
-        plugin.getShardManager().giveInitialShards(dragonType, player);
+        DragonEntity dragon = plugin.getDragonManager().spawnDragon(
+            dragonType,
+            dragonName,
+            UUID.fromString(eggId),
+            player.getLevel(),
+            player.getPosition(),
+            player
+        );
 
-        // Now proceed to summon the newly named dragon
-        plugin.getLogger().info("Attempting to summon newly named dragon (" + newName + ") for player " + player.getName());
-        com.youssgm3o8.rokidragon.dragon.DragonEntity dragon = plugin.getDragonManager().spawnDragon(player);
         if (dragon != null) {
+            // Register the dragon using the new method
             plugin.registerActiveDragon(player, dragon);
+            
+            // Set cooldown
             int summonCooldown = plugin.getConfig().getInt("timing.cooldowns.summon_seconds", 30);
             plugin.setCooldown(player.getName(), summonCooldown);
         } else {
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.summonFailed"));
-            openMainMenu(player); // Go back to menu if summon fails after naming
+            player.sendMessage(TextFormat.YELLOW + "Try moving to a different location or relogging.");
         }
-        // No need to openMainMenu here if summon succeeds, the dragon is summoned.
     }
 } 

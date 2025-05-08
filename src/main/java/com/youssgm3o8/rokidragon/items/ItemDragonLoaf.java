@@ -27,8 +27,8 @@ public class ItemDragonLoaf extends ItemBread {
         String name = languageManager.get("items.dragon_loaf.name", "§6Dragon Loaf"); // Default name with color
         this.setCustomName(name); // Name includes color code from lang file
 
-        // Get lore from LanguageManager directly using getRaw which returns the raw value
-        Object rawLore = languageManager.getRaw("items.dragon_loaf.lore");
+        // Get lore from LanguageManager directly using getRawObject which returns the raw object
+        Object rawLore = languageManager.getRawObject("items.dragon_loaf.lore");
         List<String> loreList = new ArrayList<>();
         
         if (rawLore instanceof List) {

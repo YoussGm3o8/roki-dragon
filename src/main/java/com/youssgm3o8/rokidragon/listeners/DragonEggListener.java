@@ -248,12 +248,29 @@ public class DragonEggListener implements Listener {
         }
         
         if (isHatched) {
-            // Summon or despawn dragon
+            // Check if the player has an active dragon
             if (plugin.hasActiveDragon(player)) {
-                plugin.despawnDragon(player);
-                player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.dragonDismissed"));
+                // Get the active dragon to verify it matches this egg
+                DragonEntity activeDragon = null;
+                for (Map.Entry<UUID, DragonEntity> entry : plugin.getActiveDragons().entrySet()) {
+                    if (entry.getKey().equals(player.getUniqueId())) {
+                        activeDragon = entry.getValue();
+                        break;
+                    }
+                }
+                
+                // Verify the active dragon belongs to this egg
+                if (activeDragon != null && eggId.equals(activeDragon.getDragonId())) {
+                    // It's the correct dragon, despawn it
+                    plugin.despawnDragon(player);
+                    player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.dragonDismissed"));
+                } else {
+                    // This is not the correct egg for the active dragon
+                    player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.wrongEgg"));
+                }
             } else {
-                summonDragon(player);
+                // No active dragon, summon using this specific egg
+                summonDragon(player, eggId);
             }
         } else {
             // Revert: Original logic - Inform player to use shift-right-click
@@ -262,9 +279,9 @@ public class DragonEggListener implements Listener {
     }
     
     /**
-     * Summon the player's dragon
+     * Summon the player's dragon using the specific egg ID
      */
-    private void summonDragon(Player player) {
+    private void summonDragon(Player player, String eggId) {
         // Check for cooldown
         if (plugin.isOnCooldown(player.getName())) {
             long remainingSeconds = plugin.getCooldownTime(player.getName());
@@ -284,14 +301,27 @@ public class DragonEggListener implements Listener {
             return;
         }
         
-        // Summon dragon
-        DragonEntity dragon = plugin.getDragonManager().spawnDragon(player);
+        // Get the dragon's details from the database
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
+        
+        // Summon the specific dragon using the egg ID
+        DragonEntity dragon = plugin.getDragonManager().spawnDragon(
+            dragonType,
+            dragonName,
+            UUID.fromString(eggId),
+            player.getLevel(),
+            player.getPosition(),
+            player
+        );
+        
         if (dragon != null) {
             // Register the dragon using the new method
             plugin.registerActiveDragon(player, dragon);
             
             // Set cooldown
             int summonCooldown = plugin.getConfig().getInt("timing.cooldowns.summon_seconds", 30);
+            plugin.setCooldown(player.getName(), summonCooldown);
         } else {
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.summonFailed"));
             // Suggest a solution to the player

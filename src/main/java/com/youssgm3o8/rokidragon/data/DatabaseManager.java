@@ -1,15 +1,12 @@
 package com.youssgm3o8.rokidragon.data;
 
 import java.io.File; // Needed for path manipulation
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp; // For date handling
 import java.util.Date;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -20,12 +17,8 @@ import java.util.UUID;
 
 // ORMLite imports removed
 import com.youssgm3o8.rokidragon.DragonPlugin;
-import com.youssgm3o8.rokidragon.data.models.Dragon;
-import com.youssgm3o8.rokidragon.data.models.DragonEgg;
-import com.youssgm3o8.rokidragon.data.models.DragonLog;
-import com.youssgm3o8.rokidragon.data.models.StoredEgg;
-
 import cn.nukkit.nbt.tag.CompoundTag;
+import cn.nukkit.Player;
 // DbLib import was already removed
 
 public class DatabaseManager {
@@ -72,7 +65,8 @@ public class DatabaseManager {
                              "isDead INTEGER DEFAULT 0, " +
                              "killedBy TEXT, " +
                              "deathTime INTEGER, " +
-                             "deathLocation TEXT)");
+                             "deathLocation TEXT, " +
+                             "dragonHealth FLOAT DEFAULT 100.0)");
                 plugin.getLogger().info("Table 'dragon_eggs' created/verified.");
 
                 // Check if death-related columns exist, add them if not
@@ -82,6 +76,7 @@ public class DatabaseManager {
                     boolean hasKilledBy = false;
                     boolean hasDeathTime = false;
                     boolean hasDeathLocation = false;
+                    boolean hasDragonHealth = false;
                     
                     while (rs.next()) {
                         String columnName = rs.getString("name");
@@ -93,6 +88,8 @@ public class DatabaseManager {
                             hasDeathTime = true;
                         } else if ("deathLocation".equalsIgnoreCase(columnName)) {
                             hasDeathLocation = true;
+                        } else if ("dragonHealth".equalsIgnoreCase(columnName)) {
+                            hasDragonHealth = true;
                         }
                     }
                     
@@ -114,6 +111,11 @@ public class DatabaseManager {
                     if (!hasDeathLocation) {
                         plugin.getLogger().info("Adding deathLocation column to dragon_eggs table...");
                         stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathLocation TEXT");
+                    }
+                    
+                    if (!hasDragonHealth) {
+                        plugin.getLogger().info("Adding dragonHealth column to dragon_eggs table...");
+                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN dragonHealth FLOAT DEFAULT 100.0");
                     }
                     
                 } catch (SQLException e) {
@@ -1219,9 +1221,24 @@ public class DatabaseManager {
      * @return A list of maps containing stored egg information
      */
     public List<Map<String, Object>> getStoredEggsForPlayer(String playerName) {
-        // Convert player name to UUID (implement this if you store players by name)
-        // For now, we'll assume playerName is UUID string
-        String playerUUID = playerName; // Adjust as needed for your implementation
+        // Convert player name to UUID by looking up the player
+        String playerUUID = null;
+        
+        try {
+            // Try to get player from server first
+            Player player = plugin.getServer().getPlayerExact(playerName);
+            if (player != null) {
+                playerUUID = player.getUniqueId().toString();
+                plugin.getLogger().info("Found online player: " + playerName + ", UUID: " + playerUUID);
+            } else {
+                // Last resort: use name directly (legacy support)
+                playerUUID = playerName;
+                plugin.getLogger().info("Player not online, using name as fallback: " + playerName);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().error("Error getting UUID for player " + playerName + ": " + e.getMessage(), e);
+            playerUUID = playerName; // Fallback to using name directly
+        }
         
         List<Map<String, Object>> result = new ArrayList<>();
         
@@ -1232,6 +1249,7 @@ public class DatabaseManager {
                     
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, playerUUID);
+            plugin.getLogger().info("Looking up stored eggs for playerUUID: " + playerUUID);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> eggData = new HashMap<>();
@@ -1245,6 +1263,7 @@ public class DatabaseManager {
             plugin.getLogger().error("Error getting stored eggs: " + e.getMessage(), e);
         }
         
+        plugin.getLogger().info("Found " + result.size() + " stored eggs for player: " + playerName);
         return result;
     }
     
@@ -1311,9 +1330,28 @@ public class DatabaseManager {
      * @return True if successful
      */
     public boolean storeEgg(String playerName, String eggId) {
-        // Convert player name to UUID (implement this if you store players by name)
-        // For now, we'll assume playerName is UUID string
-        String playerUUID = playerName; // Adjust as needed for your implementation
+        // Convert player name to UUID by looking up the player in the server
+        String playerUUID = null;
+        
+        try {
+            // Try to get player from server first
+            Player player = plugin.getServer().getPlayerExact(playerName);
+            if (player != null) {
+                playerUUID = player.getUniqueId().toString();
+                plugin.getLogger().info("Found online player: " + playerName + ", UUID: " + playerUUID);
+            } else {
+                // Player might be offline, try to get from database
+                playerUUID = getPlayerUUIDFromEggId(eggId);
+                if (playerUUID == null) {
+                    // Last resort: use name directly (legacy support)
+                    playerUUID = playerName;
+                    plugin.getLogger().warning("Could not find UUID for player " + playerName + ", using name as fallback");
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().error("Error getting UUID for player " + playerName + ": " + e.getMessage(), e);
+            playerUUID = playerName; // Fallback to using name directly
+        }
         
         // Find the next available slot
         int slotNumber = getNextAvailableSlot(playerUUID);
@@ -1732,5 +1770,46 @@ public class DatabaseManager {
             connection = DriverManager.getConnection(dbUrl);
         }
         return connection;
+    }
+
+    /**
+     * Save the current health of a dragon to the database
+     * 
+     * @param eggId The ID of the egg associated with the dragon
+     * @param health The current health of the dragon
+     * @return true if successfully saved
+     */
+    public boolean saveDragonHealth(String eggId, float health) {
+        String sql = "UPDATE dragon_eggs SET dragonHealth = ? WHERE eggId = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setFloat(1, health);
+            pstmt.setString(2, eggId);
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error saving dragon health: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Get the saved health of a dragon
+     * 
+     * @param eggId The ID of the egg associated with the dragon
+     * @return The saved health of the dragon, or default max health if not found
+     */
+    public float getDragonHealth(String eggId) {
+        String sql = "SELECT dragonHealth FROM dragon_eggs WHERE eggId = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, eggId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getFloat("dragonHealth");
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error getting dragon health: " + e.getMessage(), e);
+        }
+        return 100.0f; // Return default max health if not found
     }
 } 

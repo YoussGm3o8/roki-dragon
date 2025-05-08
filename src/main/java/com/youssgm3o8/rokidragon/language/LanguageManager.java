@@ -12,7 +12,7 @@ import java.util.Map;
 public class LanguageManager {
     private final DragonPlugin plugin;
     private Config languageConfig;
-    private final Map<String, String> cachedStrings = new HashMap<>();
+    private final Map<String, String> cachedRawStrings = new HashMap<>();
     private boolean debugMode = false;
 
     public LanguageManager(DragonPlugin plugin) {
@@ -55,38 +55,16 @@ public class LanguageManager {
             plugin.getLogger().info("Getting lang string for key: '" + key + "'");
         }
 
-        // Try to get from cache first
-        String value = cachedStrings.get(key);
-        
-        // *** ADDED LOGGING ***
-        String source = "cache"; // Track where the value came from
-        // *** END LOGGING ***
-
-        // If not in cache, get from config and cache it
-        if (value == null) {
-            // *** ADDED LOGGING ***
-            plugin.getLogger().info("[LangManager Debug] Key '" + key + "' not found in cache. Querying languageConfig.");
-            source = "config"; // Update source
-            // *** END LOGGING ***
-
-            value = languageConfig.getString(key, key);
-            cachedStrings.put(key, value);
-
-            // *** ADDED LOGGING ***
-            plugin.getLogger().info("[LangManager Debug] Value from languageConfig.getString for key '" + key + "': '" + value + "'. Caching it.");
-            // *** END LOGGING ***
-        }
-
-        if (debugMode) {
-            plugin.getLogger().info("Language result for '" + key + "': '" + value + "' (Source: " + source + ")");
-        }
+        // Get the raw string from cache or config
+        String rawValue = getRawStringFromCache(key);
         
         // Format the string with the provided parameters
+        String formattedValue = rawValue;
         if (params.length > 0) {
             try {
                 // Use our own simple replacement instead of MessageFormat to avoid formatting issues
                 for (int i = 0; i < params.length; i++) {
-                    value = value.replace("{" + i + "}", String.valueOf(params[i]));
+                    formattedValue = formattedValue.replace("{" + i + "}", String.valueOf(params[i]));
                 }
             } catch (Exception e) {
                 plugin.getLogger().warning("Error formatting language string for key: " + key);
@@ -94,7 +72,34 @@ public class LanguageManager {
             }
         }
         
-        return TextFormat.colorize('&', value);
+        return TextFormat.colorize('&', formattedValue);
+    }
+
+    /**
+     * Gets a raw string from cache or config
+     * 
+     * @param key The language key
+     * @return The raw string
+     */
+    private String getRawStringFromCache(String key) {
+        // Try to get from cache first
+        String rawValue = cachedRawStrings.get(key);
+        
+        // If not in cache, get from config and cache it
+        if (rawValue == null) {
+            if (debugMode) {
+                plugin.getLogger().info("[LangManager Debug] Key '" + key + "' not found in cache. Querying languageConfig.");
+            }
+            
+            rawValue = languageConfig.getString(key, key);
+            cachedRawStrings.put(key, rawValue);
+            
+            if (debugMode) {
+                plugin.getLogger().info("[LangManager Debug] Value from languageConfig.getString for key '" + key + "': '" + rawValue + "'. Caching it.");
+            }
+        }
+        
+        return rawValue;
     }
 
     /**
@@ -104,7 +109,7 @@ public class LanguageManager {
      * @return The raw language string
      */
     public String getRaw(String key) {
-        return languageConfig.getString(key, key);
+        return getRawStringFromCache(key);
     }
 
     /**
@@ -122,7 +127,7 @@ public class LanguageManager {
      */
     public void reload() {
         loadLanguages();
-        cachedStrings.clear();
+        cachedRawStrings.clear();
     }
 
     /**

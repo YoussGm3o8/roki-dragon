@@ -186,10 +186,22 @@ public class SummonDragonCommand extends Command {
             return true;
         }
 
-        plugin.getLogger().info("Attempting to summon dragon for " + player.getName());
+        plugin.getLogger().info("Attempting to summon dragon for " + player.getName() + " using egg ID: " + eggId);
         
-        // Summon dragon using the manager
-        com.youssgm3o8.rokidragon.dragon.DragonEntity dragon = dragonManager.spawnDragon(player);
+        // Get the dragon's details from the database
+        String dragonType = databaseManager.getDragonType(eggId);
+        String dragonName = databaseManager.getDragonName(eggId);
+        
+        // Summon the specific dragon using the egg ID
+        com.youssgm3o8.rokidragon.dragon.DragonEntity dragon = dragonManager.spawnDragon(
+            dragonType,
+            dragonName,
+            UUID.fromString(eggId),
+            player.getLevel(),
+            player.getPosition(),
+            player
+        );
+        
         if (dragon != null) {
             // Register the dragon using the new method
             plugin.registerActiveDragon(player, dragon);

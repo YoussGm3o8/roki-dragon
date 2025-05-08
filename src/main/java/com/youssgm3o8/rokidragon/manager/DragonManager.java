@@ -109,6 +109,12 @@ public class DragonManager {
                 case "Lightning Dragon":
                     entityIdentifier = "roki:lightning_dragon";
                     break;
+                case "Water Dragon":
+                    entityIdentifier = "roki:water_dragon";
+                    break;
+                case "Earth Dragon":
+                    entityIdentifier = "roki:earth_dragon";
+                    break;
                 default:
                     plugin.getLogger().warning("Unknown dragonType '" + dragonType + "' during spawn. Defaulting to fire.");
                     entityIdentifier = "roki:fire_dragon"; // Default if type is unknown
@@ -135,6 +141,13 @@ public class DragonManager {
             dragon.initialize(plugin);
             dragon.setOwner(player);
             dragon.setDragonId(eggId); // Set the dragon ID
+            
+            // Load and apply saved health from database
+            float savedHealth = plugin.getDatabaseManager().getDragonHealth(eggId);
+            if (savedHealth > 0) {
+                dragon.setPluginHealth(savedHealth);
+                plugin.getLogger().info("Loaded saved health for dragon " + eggId + ": " + savedHealth);
+            }
             
             // Spawn the entity in the world
             dragon.spawnToAll();

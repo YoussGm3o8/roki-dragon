@@ -195,13 +195,11 @@ public class EventListenerEdit implements Listener {
                             // Dragon hasn't been named yet, open the naming form
                             plugin.getDragonGUI().openFirstNamingForm(player, eggId);
                             plugin.getLogger().info("Opening first naming form for egg " + eggId);
+                            // Do not summon the dragon yet, it will be summoned after naming
                         } else {
                             // Dragon already has a name, proceed with summoning
                             plugin.getLogger().info("Dragon for egg " + eggId + " already named ('" + existingName + "'), summoning directly.");
-                            handleSummonDragon(player); // Attempt to summon
-                            
-                            // Do not give shards for already named dragons
-                            // This avoids giving shards after server restart
+                            handleSummonDragon(player, eggId); // Pass eggId to ensure the right dragon is summoned
                         }
                     }
                 } else {
@@ -248,7 +246,7 @@ public class EventListenerEdit implements Listener {
         lastInteract.remove(player.getUniqueId()); // Clean up cooldown map entry
     }
     
-    private void handleSummonDragon(Player player) {
+    private void handleSummonDragon(Player player, String eggId) {
         // Check for cooldown
         if (plugin.isOnCooldown(player.getName())) {
             long remainingSeconds = plugin.getCooldownTime(player.getName());
@@ -271,8 +269,20 @@ public class EventListenerEdit implements Listener {
             return;
         }
         
-        // Summon dragon using the manager
-        DragonEntity dragon = plugin.getDragonManager().spawnDragon(player);
+        // Get the dragon's details from the database
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
+        
+        // Summon the specific dragon using the egg ID
+        DragonEntity dragon = plugin.getDragonManager().spawnDragon(
+            dragonType,
+            dragonName,
+            UUID.fromString(eggId),
+            player.getLevel(),
+            player.getPosition(),
+            player
+        );
+        
         if (dragon != null) {
             // Register the dragon using the new method
             plugin.registerActiveDragon(player, dragon);
@@ -307,9 +317,10 @@ public class EventListenerEdit implements Listener {
             // }
 
             // Check if dragon is already at full health - USE PLUGIN HEALTH
-            if (dragon.getPluginHealth() >= dragon.getPluginMaxHealth()) { // Use new getter methods
+            if (dragon.getPluginHealth() >= dragon.getPluginMaxHealth()) {
                 // Update message key to use the generic one from lang file
                 player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.info.dragonFullHealth", dragon.getName()));
+                event.setCancelled(true); // Prevent default interaction (mounting)
                 return;
             }
 
@@ -323,7 +334,10 @@ public class EventListenerEdit implements Listener {
                 player.getInventory().setItemInHand(item);
             }
 
-            player.sendMessage(TextFormat.GREEN + "You fed " + dragon.getName() + " a Dragon Loaf. It healed " + (int)healAmount + " HP!");
+            // Use language key for feeding message
+            player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.dragonFed", 
+                dragon.getName(), (int)healAmount));
+
             // Optional: Add particle effect to dragon
             // dragon.getLevel().addParticle(...);
 
