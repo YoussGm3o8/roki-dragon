@@ -2,6 +2,7 @@ package com.youssgm3o8.rokidragon.task;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 import com.youssgm3o8.rokidragon.DragonPlugin;
 import com.youssgm3o8.rokidragon.data.IncubatingEgg;
@@ -35,7 +36,7 @@ public class ProcessIncubationTask extends Task {
             }
             
             // Get all eggs that are currently incubating
-            List<IncubatingEgg> incubatingEggs = plugin.getDatabaseManager().getAllIncubatingEggs();
+            List<Map<String, String>> incubatingEggs = plugin.getDatabaseManager().getAllIncubatingEggs();
             
             if (incubatingEggs.isEmpty()) {
                 return; // No eggs to process
@@ -47,11 +48,11 @@ public class ProcessIncubationTask extends Task {
             
             plugin.getLogger().info("Processing " + incubatingEggs.size() + " incubating eggs");
             
-            for (IncubatingEgg egg : incubatingEggs) {
+            for (Map<String, String> eggData : incubatingEggs) {
                 try {
-                    processEgg(egg, currentTime, requiredSeconds);
+                    processEgg(eggData, currentTime, requiredSeconds);
                 } catch (Exception e) {
-                    plugin.getLogger().error("Error processing egg " + egg.getEggId() + ": " + e.getMessage(), e);
+                    plugin.getLogger().error("Error processing egg " + eggData.get("eggId") + ": " + e.getMessage(), e);
                 }
             }
         } catch (Exception e) {
@@ -128,13 +129,16 @@ public class ProcessIncubationTask extends Task {
     /**
      * Process a single incubating egg
      */
-    private void processEgg(IncubatingEgg egg, long currentTime, int requiredSeconds) {
-        String playerUuid = egg.getPlayerUUID();
-        String eggId = egg.getEggId();
+    private void processEgg(Map<String, String> eggData, long currentTime, int requiredSeconds) {
+        String playerUuid = eggData.get("playerUUID");
+        String eggId = eggData.get("eggId");
+        String dragonType = eggData.get("dragonType");
+        long incubationStartTime = Long.parseLong(eggData.getOrDefault("incubationStartTime", "0"));
+        int incubationProgress = Integer.parseInt(eggData.getOrDefault("incubationProgress", "0"));
         
         // Log full egg details for debugging
-        plugin.getLogger().info("Processing egg " + eggId + " - Current seconds: " + egg.getIncubationSeconds() + 
-                               ", Start time: " + egg.getIncubationStartTime() + ", Current time: " + currentTime);
+        plugin.getLogger().info("Processing egg " + eggId + " - Current seconds: " + incubationProgress + 
+                               ", Start time: " + incubationStartTime + ", Current time: " + currentTime);
         
         // Check if player is online
         Player player = null;
@@ -165,7 +169,7 @@ public class ProcessIncubationTask extends Task {
         }
         
         // Calculate time passed since last update
-        long lastCheckTime = egg.getIncubationStartTime();
+        long lastCheckTime = incubationStartTime;
         int additionalSeconds = (int) (currentTime - lastCheckTime);
         
         plugin.getLogger().info("Time since last check: " + additionalSeconds + " seconds for egg " + eggId);
@@ -176,9 +180,9 @@ public class ProcessIncubationTask extends Task {
         }
         
         // Update incubation progress
-        int newTotalSeconds = egg.getIncubationSeconds() + additionalSeconds;
+        int newTotalSeconds = incubationProgress + additionalSeconds;
         plugin.getLogger().info("Updating incubation progress for egg " + eggId + 
-                               " from " + egg.getIncubationSeconds() + " to " + newTotalSeconds + " seconds");
+                               " from " + incubationProgress + " to " + newTotalSeconds + " seconds");
         
         // Update in database FIRST so it's not lost
         plugin.getDatabaseManager().updateIncubationProgress(eggId, newTotalSeconds);
@@ -199,17 +203,17 @@ public class ProcessIncubationTask extends Task {
         
         // Check if we've crossed a 10% boundary
         if ((oldPercentage / 10) < (newPercentage / 10)) {
-            plugin.getLogger().info("Sending progress notification to player: " + progressPercent + "%");
-            player.sendMessage(TextFormat.AQUA + plugin.getLanguageString("messages.success.incubationProgress", progressPercent));
+            String message = plugin.getLanguageString("messages.success.incubationProgress", progressPercent);
+            player.sendMessage(TextFormat.GREEN + message);
         }
         
-        // Check if incubation is complete
-        if (newTotalSeconds >= requiredSeconds) {
-            plugin.getLogger().info("Egg " + eggId + " has completed incubation, hatching now");
-            handleEggHatching(player, egg);
-        } else {
-            // Update egg lore to show progress
-            updateEggLore(player, eggItem, eggId, progressPercent);
+        // Update the egg's lore
+        updateEggLore(player, eggItem, eggId, progressPercent);
+        
+        // If we've reached 100%, hatch the egg
+        if (progressPercent >= 100) {
+            plugin.getLogger().info("Egg " + eggId + " is fully incubated! Hatching...");
+            handleEggHatching(player, eggData);
         }
     }
     
@@ -288,52 +292,104 @@ public class ProcessIncubationTask extends Task {
     }
     
     /**
-     * Handle the hatching of an egg
-     * 
+     * Handle the egg hatching process
      * @param player The player who owns the egg
-     * @param egg The egg to hatch
+     * @param eggData The egg data from the database
      */
-    private void handleEggHatching(Player player, IncubatingEgg egg) {
-        String eggId = egg.getEggId();
+    private void handleEggHatching(Player player, Map<String, String> eggData) {
+        String eggId = eggData.get("eggId");
         
-        // Determine dragon type based on environment
-        String dragonType = determineDragonType(player);
-        String dragonName = egg.getDragonName(); // This should be the default "Dragon"
+        // Check if this is a first-time hatching by looking for hatched status in database
+        boolean isAlreadyHatched = plugin.getDatabaseManager().isEggHatched(eggId);
+        
+        // Get any existing type from database
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        plugin.getLogger().info("[DB Debug] getDragonType for eggId " + eggId + " found type: " + dragonType);
+        
+        // For first-time hatching, determine type based on environment
+        if (!isAlreadyHatched) {
+            // Always determine type based on environment for first-time hatching
+            String environmentType = determineDragonType(player);
+            
+            // If there's no existing type or we're doing first-time hatching, use the environment type
+            if (dragonType == null || dragonType.isEmpty() || plugin.getConfig().getBoolean("dragon_settings.environment_determines_type", true)) {
+                dragonType = environmentType;
+                plugin.getLogger().info("Setting dragon type based on environment: " + dragonType);
+                
+                // Save the determined type to database
+                plugin.getDatabaseManager().setDragonType(eggId, dragonType);
+            } else {
+                plugin.getLogger().info("Using existing dragon type from database: " + dragonType);
+            }
+        } else {
+            plugin.getLogger().info("Egg was already hatched before, using existing type: " + dragonType);
+        }
+        
+        // Get the dragon name from database or generate one
+        String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
+        if (dragonName == null || dragonName.isEmpty()) {
+            dragonName = "Dragon"; // Default name
+            
+            // Save it to database
+            plugin.getDatabaseManager().setDragonName(eggId, dragonName);
+        }
         
         // Mark egg as hatched in database
         plugin.getDatabaseManager().setEggHatched(eggId, true);
         
-        // Store updated dragon type
-        plugin.getDatabaseManager().setDragonType(eggId, dragonType);
-        
-        // Stop incubation
+        // Set egg as not incubating anymore
         plugin.getDatabaseManager().setEggIncubating(eggId, false);
         
-        // Send hatching message to player
-        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatched"));
-        
-        // Include color in the type name for the message
-        String coloredDragonType = DragonUtils.getColorByType(dragonType) + dragonType + TextFormat.RESET; 
-        player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatchedType", coloredDragonType));
-        
-        // Update egg in player's inventory
+        // Update the egg in the player's inventory
         updateEggInInventory(player, eggId, dragonType, dragonName);
         
-        // Register the hatched dragon in the system (ensures DB record exists)
-        String playerUUID = player.getUniqueId().toString();
-        boolean registered = plugin.getDatabaseManager().registerDragon(playerUUID, eggId, dragonType, dragonName);
+        // Show hatching effects
+        showHatchingEffects(player);
         
-        if (registered) {
-            plugin.getLogger().info("Successfully registered hatched dragon " + dragonName + " (" + dragonType + ") for player " + player.getName());
+        // Send notification
+        String hatchMessage = plugin.getLanguageString("messages.success.eggHatched", dragonType);
+        player.sendMessage(TextFormat.GREEN + hatchMessage);
+        
+        // Send instructions
+        player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.success.dragonInstructions"));
+        
+        // Announce to server if configured
+        if (plugin.getConfig().getBoolean("announcements.egg_hatched", true)) {
+            String announcement = plugin.getLanguageString("messages.announcements.eggHatched", 
+                player.getName(), TextFormat.GOLD + dragonType);
+            plugin.getLogger().info(announcement);
+            // Don't add additional TextFormat.GREEN here since it's already in the language file
+            plugin.getServer().broadcastMessage(announcement);
+        }
+        
+        plugin.getLogger().info("Player " + player.getName() + " hatched a " + dragonType + " dragon from egg " + eggId);
+    }
+    
+    /**
+     * Show particle and sound effects for egg hatching
+     */
+    private void showHatchingEffects(Player player) {
+        // Implementation depends on Nukkit API for particles/sounds
+        // Simple implementation for now
+        Position pos = player.getPosition();
+        Level level = player.getLevel();
+        
+        // Play sounds if possible
+        try {
+            player.getLevel().addSound(pos, cn.nukkit.level.Sound.MOB_ENDERDRAGON_GROWL);
+        } catch (Exception e) {
+            // Ignore if sound can't play
+        }
+        
+        // Add effects
+        for (int i = 0; i < 20; i++) {
+            double offsetX = Math.random() - 0.5;
+            double offsetY = Math.random() * 1.5;
+            double offsetZ = Math.random() - 0.5;
             
-            // Reverted: No name check or conditional form opening here.
-            // The naming form logic is moved to the summoning interaction.
-
-            // Reverted: Shards are handled after successful naming or during summon if already named.
-            // plugin.getShardManager().giveInitialShards(dragonType, player);
-
-        } else {
-            plugin.getLogger().warning("Failed to register hatched dragon for player " + player.getName());
+            level.addParticle(new cn.nukkit.level.particle.GenericParticle(
+                pos.clone().add(offsetX, offsetY, offsetZ), 
+                cn.nukkit.level.particle.GenericParticle.TYPE_HUGE_EXPLODE_SEED));
         }
     }
     
@@ -471,48 +527,42 @@ public class ProcessIncubationTask extends Task {
      * @param eggId The ID of the egg to update
      */
     private void updateEggInInventory(Player player, String eggId, String dragonType, String dragonName) {
+        plugin.getLogger().info("Updating egg in inventory with ID: " + eggId + ", type: " + dragonType);
+        
+        // First, find the egg in the inventory
+        Item eggItem = null;
+        int eggSlot = -1;
+        
         for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
             Item item = player.getInventory().getItem(slot);
             
             if (item.getId() == Item.DRAGON_EGG && item.hasCompoundTag()) {
                 CompoundTag tag = item.getNamedTag();
                 
-                boolean isTargetEgg = false;
-                UUID dragonUUID = null;
-                
-                if (tag.contains("eggId") && tag.getString("eggId").equals(eggId)) {
-                    isTargetEgg = true;
-                    try {
-                        dragonUUID = UUID.fromString(tag.getString("eggId"));
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Invalid UUID format in eggId tag for egg " + eggId);
-                    }
-                } else if (tag.contains("dragon_egg_id") && tag.getString("dragon_egg_id").equals(eggId)) {
-                    isTargetEgg = true;
-                    try {
-                        dragonUUID = UUID.fromString(tag.getString("dragon_egg_id"));
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Invalid UUID format in dragon_egg_id tag for egg " + eggId);
-                    }
-                } else if (tag.contains("DragonUUID") && tag.getString("DragonUUID").equals(eggId)) {
-                    isTargetEgg = true;
-                    try {
-                        dragonUUID = UUID.fromString(tag.getString("DragonUUID"));
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Invalid UUID format in DragonUUID tag for egg " + eggId);
-                    }
-                }
-                
-                if (isTargetEgg && dragonUUID != null) {
-                    // Create updated egg with current status
-                    Item updatedEgg = plugin.getEggManager().createDragonEgg(dragonType, dragonName, dragonUUID);
+                // Check all possible tag names for the egg ID
+                if ((tag.contains("eggId") && tag.getString("eggId").equals(eggId)) || 
+                    (tag.contains("dragon_egg_id") && tag.getString("dragon_egg_id").equals(eggId)) || 
+                    (tag.contains("DragonUUID") && tag.getString("DragonUUID").equals(eggId))) {
                     
-                    // Replace in inventory
-                    player.getInventory().setItem(slot, updatedEgg);
-                    player.getInventory().sendContents(player); // Make sure client updates
+                    plugin.getLogger().info("Found matching egg in slot " + slot);
+                    eggItem = item;
+                    eggSlot = slot;
                     break;
                 }
             }
+        }
+        
+        // If we found the egg, update it
+        if (eggItem != null && eggSlot >= 0) {
+            // Create updated egg with current status
+            Item updatedEgg = plugin.getEggManager().createDragonEgg(dragonType, dragonName, UUID.fromString(eggId));
+            
+            // Replace in inventory
+            player.getInventory().setItem(eggSlot, updatedEgg);
+            player.getInventory().sendContents(player); // Make sure client updates
+            plugin.getLogger().info("Updated egg in player inventory at slot " + eggSlot);
+        } else {
+            plugin.getLogger().warning("Could not find egg with ID " + eggId + " in player inventory!");
         }
     }
 } 

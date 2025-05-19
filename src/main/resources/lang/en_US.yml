@@ -93,9 +93,10 @@ messages:
     cooldown: "§cYou must wait §e{0}§c seconds before summoning your dragon again."
     alreadySummoned: "§cYour dragon is already summoned!"
     notSummoned: "§cYou don't have a dragon summoned right now."
-    dragonDefeated: "§cYour dragon has been defeated!"
+    dragonDefeated: "§cYour dragon has been defeated in battle!"
     lostForever: "§cIt has returned to the void and cannot be summoned again."
     eggNotBelongToYou: "§cThis dragon egg doesn't belong to you! It's unstable!" # Changed wording
+    dragonIsDead: "§cThis dragon has died and cannot be summoned or incubated anymore."
     eggAlreadyHatched: "§cThis egg has already hatched into a dragon!"
     oneEggAtATime: "§cYou can only incubate one egg at a time!"
     needShiftClick: "§cYour dragon egg isn't hatched! Use §bShift + Right-Click§c to toggle incubation." # Clarified action
@@ -120,6 +121,11 @@ messages:
     worldRestricted: "§cDragons can only be summoned and managed in specific worlds."
     worldRestrictedWithList: "§cDragons can only be summoned and managed in these worlds: §e{0}"
     missingShootItem: "§cYou need §e{0}§c to use this ability!" # Added key
+    missingFireShard: "§cYou need §cFire Dragon Shards§c to use your fire ability!"
+    missingIceShard: "§cYou need §bIce Dragon Shards§c to use your ice ability!"
+    missingLightningShard: "§cYou need §eLightning Dragon Shards§c to use your lightning ability!"
+    missingWaterShard: "§cYou need §9Water Dragon Shards§c to use your water ability!"
+    missingEarthShard: "§cYou need §2Earth Dragon Shards§c to use your earth ability!"
     economyNotFound: "§cEconomy plugin (EconomyAPI) not found or not enabled." # Added missing key
     purchaseFailed: "§cThe purchase could not be completed due to an error." # Added missing key
     wrongEgg: "§cThis is not the egg for your active dragon! Each dragon must be despawned using its own egg."
@@ -136,17 +142,22 @@ messages:
     incubationProgress: "§eYour dragon egg is §a{0}%§e incubated!" # Added color codes
     eggHatched: "§aYour dragon egg has hatched!"
     eggHatchedType: "§aIt's a {0}§a!" # Placeholder {0} will include color code from Dragon type name
+    dragonInstructions: "§eUse §athe dragon egg§e to summon your new companion!"
     eggPurchased: "§aYou purchased a dragon egg for §e{0}§a coins!\n§eIncubate it in different environments to determine its type." # Combined messages
     eggPurchasedInstructions: "§eIncubate it in different environments to determine its type." # This line can optionally be removed or kept for other potential uses, leaving it for now.
     dragonFed: "§aYou fed §f{0}§a a Dragon Loaf. It healed §c{1} HP§a!" # Added color codes
     eggReportedLost: "§aDragon egg reported as lost and removed." # Added message
     eggStored: "§aStored egg: {0}" # Added missing key with placeholder for colored name
     eggRetrieved: "§aRetrieved egg: {0}" # Added missing key with placeholder for colored name
-    initialShards: "§aYou received §e{0} §a{1}§a for your §f{2}§a!" # Added key {0}=count, {1}=shard name+color, {2}=dragon type
+    initialShards: "§aYou received §e{0} §a{1} Shards§a for your §f{2}§a!" # Added key {0}=count, {1}=shard name+color, {2}=dragon type
     reportCancelled: "§eEgg report cancelled." # Added message for when reporting is cancelled
     purchaseCancelled: "§ePurchase cancelled." # Added missing key
     eggStoredFull: "§eYour inventory was full, so the purchased egg was placed in storage." # Added missing key
     dragonDied: "§c{0} has died. §aYou can keep the egg as a souvenir - it doesn't count toward your dragon limit."
+
+  death:
+    defeated: "§cYour dragon has been defeated in battle!"
+    lostForever: "§eIts spirit has returned to the void and it cannot be summoned again."
 
   commandUsage:
     dragonName: "§eUsage: /dragon name <New Name>" # Added color code
@@ -189,7 +200,18 @@ messages:
     # Added countdown message lines
     incubationTime: "§eHatching takes §a{0} minutes§e of active incubation time."
     incubationCounter: "§eTotal incubation time remaining: §a{0} minutes§e."
-    dragonExplained: "§eYour dragon can breathe fire! §aRight-Click§e while riding!"
+    dragonExplained: "§eYou can control your dragon with §a/dragon help§e for commands or use the Dragon Egg to summon/dismiss it."
+    dragonStats: "§6Dragon Stats: §fName: §a{0}§f, Type: §a{1}§f, Health: §c{2}/{3}"
+    dragonLevel: "§6Level: §a{0}§f, XP: §a{1}/{2}"
+    dragonHelp: |
+      §6=== Dragon Commands ===
+      §a/dragon §7- Summon or dismiss your dragon
+      §a/dragon buy §7- Purchase a dragon egg
+      §a/dragon rename <name> §7- Rename your dragon
+      §a/dragon lost §7- Report a lost egg and get a replacement
+      §a/dragon store §7- Store your dragon egg
+      §a/dragon retrieve <id> §7- Retrieve a stored dragon egg
+      §a/dragon help §7- Show this help message
 
   logs: # Section for /dragonlogs command
     helpTitle: "§e=== Dragon Logs Commands ==="
@@ -213,9 +235,10 @@ messages:
   lostEgg:
     menu:
       title: "Lost Dragon Eggs"
-      egg_status_hatched: "§a[Hatched]"
-      egg_status_egg: "§e[Egg]"
-      egg_status_active: "§b[Active Dragon]"
+      egg_status_egg: "EGG" # Added key
+      egg_status_hatched: "HATCHED" # Added key
+      egg_status_active: "ACTIVE" # Added key
+      egg_status_dead: "DECEASED" # New status for dead dragons
       egg:
         name: "{0} {1} {2}" # This remains nested, but status is now flat relative to menu
         lore:
@@ -225,7 +248,7 @@ messages:
           - ""
           - "§cClick to report this egg as lost."
     confirmation:
-      title: "Confirm: Report Lost Egg"
+      title: "Confirm Lost Egg Report"
       info:
         name: "§cReport {0} as Lost?" # Added color code, {0} = Egg Name/ID
         lore:
@@ -375,3 +398,7 @@ shard:
       effect: "§2Launches devastating rock projectiles"
   lore: # Common lore lines
     instruction: "§eRight-click while riding to shoot"
+
+  announcements:
+    eggHatched: "§a§l{0} has hatched a {1} Dragon! §r§eGet your own dragon with §b/dragon buy§e!"
+    dragonDead: "§c{0}'s dragon has been defeated in battle!"

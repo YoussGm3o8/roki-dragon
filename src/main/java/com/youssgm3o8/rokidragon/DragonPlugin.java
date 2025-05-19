@@ -29,6 +29,7 @@ import com.youssgm3o8.rokidragon.entities.EntityEarthBall;
 import com.youssgm3o8.rokidragon.listeners.EventListenerEdit;
 import com.youssgm3o8.rokidragon.listeners.DragonEggListener;
 import com.youssgm3o8.rokidragon.listeners.FormResponseListener;
+import com.youssgm3o8.rokidragon.util.ResourcePackManager;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -91,6 +92,17 @@ public class DragonPlugin extends PluginBase implements Listener {
         }
         loadConfig();
         
+        // Export resource pack to server's resource_packs folder
+        getLogger().info("Exporting dragon resource pack to server...");
+        ResourcePackManager resourcePackManager = new ResourcePackManager(this);
+        boolean resourcePackExported = resourcePackManager.exportResourcePack();
+        
+        if (resourcePackExported) {
+            getLogger().info("Resource pack successfully exported and registered with the server!");
+        } else {
+            getLogger().warning("Failed to export resource pack. Dragons may not display correctly!");
+        }
+        
         // Initialize language manager
         this.languageManager = new LanguageManager(this);
         
@@ -137,10 +149,8 @@ public class DragonPlugin extends PluginBase implements Listener {
 
         // Register entity types - this is critical for proper entity spawning
         try {
-            // Register the Dragon entity with its proper name
-            // Entity.registerEntity("Dragon", DragonEntity.class);
-            
-            // Register the specific dragon types from the resource pack
+            // Register the specific dragon types with proper identifiers to match resource pack
+            // The format must be "roki:type_dragon" to match the resource pack identifiers
             Entity.registerEntity("roki:fire_dragon", DragonEntity.class);
             Entity.registerEntity("roki:ice_dragon", DragonEntity.class);
             Entity.registerEntity("roki:lightning_dragon", DragonEntity.class);
@@ -168,6 +178,15 @@ public class DragonPlugin extends PluginBase implements Listener {
 
         // Schedule cooldown map cleanup task (runs every 5 minutes)
         getServer().getScheduler().scheduleRepeatingTask(this, this::cleanupCooldownMap, 5 * 60 * 20);
+        
+        // Schedule a task to check database connection every minute
+        this.getServer().getScheduler().scheduleRepeatingTask(this, () -> {
+            // Check if database connection is valid and reconnect if needed
+            if (this.databaseManager != null) {
+                this.databaseManager.checkConnection();
+                getLogger().debug("Database connection check completed");
+            }
+        }, 20 * 60); // 60 seconds (20 ticks per second)
         
         // Save default config
         this.saveDefaultConfig();
@@ -553,8 +572,30 @@ public class DragonPlugin extends PluginBase implements Listener {
      */
     public void checkAndResumeIncubation(Player player) {
         getLogger().debug("Checking for incubating eggs for player " + player.getName());
+        
+        // Check if player is valid and has an inventory
+        if (player == null || !player.isOnline()) {
+            getLogger().warning("Attempted to check incubation for null or offline player");
+            return;
+        }
+        
+        // Check if inventory is available
+        if (player.getInventory() == null) {
+            getLogger().warning("Player " + player.getName() + " has null inventory");
+            return;
+        }
+        
+        // Get inventory contents safely
+        Map<Integer, Item> contents = player.getInventory().getContents();
+        if (contents == null) {
+            getLogger().warning("Player " + player.getName() + " has null inventory contents");
+            return;
+        }
+        
         // Find all eggs in the player's inventory
-        for (Item item : player.getInventory().getContents().values()) {
+        for (Item item : contents.values()) {
+            if (item == null) continue;
+            
             if (item.getId() == Item.DRAGON_EGG && item.hasCompoundTag()) {
                 CompoundTag tag = item.getNamedTag();
                 String eggId = null;

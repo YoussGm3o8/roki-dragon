@@ -43,6 +43,10 @@ public class DragonEggManager {
      * @return The created Dragon Egg Item.
      */
     public Item createDragonEgg(String dragonType, String dragonName, UUID dragonUUID) {
+        return createDragonEgg(dragonType, dragonName, dragonUUID, null);
+    }
+    
+    public Item createDragonEgg(String dragonType, String dragonName, UUID dragonUUID, UUID ownerUUID) {
         Item egg = Item.get(Item.DRAGON_EGG);
         
         // Get the display name from language file
@@ -60,6 +64,11 @@ public class DragonEggManager {
                 .putString("DragonUUID", dragonUUID.toString())
                 .putString("eggId", dragonUUID.toString())
                 .putBoolean("IsDragonEgg", true);
+        
+        // Add owner UUID if provided
+        if (ownerUUID != null) {
+            tag.putString("OwnerUUID", ownerUUID.toString());
+        }
         
         egg.setNamedTag(tag);
         
@@ -224,7 +233,7 @@ public class DragonEggManager {
         String dragonName = eggData.get("dragon_name");
 
         // Create the egg item
-        Item eggItem = createDragonEgg(dragonType, dragonName, dragonUUID);
+        Item eggItem = createDragonEgg(dragonType, dragonName, dragonUUID, player.getUniqueId());
 
         // Check if player has space in inventory
         if (player.getInventory().canAddItem(eggItem)) {
@@ -256,41 +265,49 @@ public class DragonEggManager {
      * @return {@code true} if hatching was successful, {@code false} otherwise.
      */
     public boolean hatchEgg(Player player, Item eggItem) {
+        // Verify it's a dragon egg
         if (!isDragonEgg(eggItem)) {
-            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.invalidEgg")); // Use lang key
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.invalidEgg"));
+            return false;
+        }
+
+        // Get the egg ID
+        UUID dragonUUID = getDragonUUID(eggItem);
+        if (dragonUUID == null) {
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.corruptedEgg"));
+            return false;
+        }
+
+        // Check if egg is already hatched
+        if (databaseManager.isEggHatched(dragonUUID.toString())) {
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.eggAlreadyHatched"));
             return false;
         }
 
         String dragonType = getDragonType(eggItem);
         String dragonName = getDragonName(eggItem);
-        UUID dragonUUID = getDragonUUID(eggItem);
 
-        if (dragonUUID == null) {
-            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.corruptedEgg")); // Use lang key
-            return false;
+        // Verify dragon type
+        if (dragonType == null || dragonType.isEmpty()) {
+            dragonType = "Fire Dragon"; // Default
         }
 
-        // Spawn the dragon entity using the DragonManager
-        DragonEntity dragon = plugin.getDragonManager().spawnDragon(
-                dragonType,
-                dragonName,
-                dragonUUID,
-                player.getLevel(),
-                player.getPosition(),
-                player);
-
-        if (dragon != null) {
-            player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggHatched",
-                    getColorForType(dragonType) + dragonName + TextFormat.GREEN)); // Use lang key with param
-            // Mark egg as hatched in DB
-            databaseManager.setEggHatched(dragonUUID.toString(), true);
-            // Update lore on the item in hand if possible (might need listener adjustment)
-            updateEggLore(eggItem, dragonUUID.toString());
-            return true;
-        } else {
-            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.hatchFailed")); // Use lang key
-            return false;
+        if (dragonName == null || dragonName.isEmpty()) {
+            dragonName = "Dragon"; // Default
         }
+
+        // Create dragon entity - we don't actually spawn it yet, just create the database entry
+        // We don't need to call spawnDragon here, just mark it as hatched in the database
+        // DragonEntity dragon = plugin.getDragonManager().createDragon(dragonUUID, dragonType, dragonName);
+        
+        // Success! We don't need to send a message here, as the ProcessIncubationTask or 
+        // admin commands will handle notifications to avoid duplicates
+        
+        // Mark egg as hatched in DB
+        databaseManager.setEggHatched(dragonUUID.toString(), true);
+        // Update lore on the item in hand if possible (might need listener adjustment)
+        updateEggLore(eggItem, dragonUUID.toString());
+        return true;
     }
 
     /**
@@ -503,6 +520,11 @@ public class DragonEggManager {
             UUID dragonUUID = UUID.fromString(eggId);
             Item eggItem = createDragonEgg(dragonType, dragonName, dragonUUID);
             
+            // Add owner UUID to the egg's NBT data
+            CompoundTag tag = eggItem.getNamedTag();
+            tag.putString("OwnerUUID", player.getUniqueId().toString());
+            eggItem.setNamedTag(tag);
+            
             // Remove the egg from storage
             plugin.getDatabaseManager().removeEgg(player.getUniqueId().toString(), eggId);
             
@@ -529,7 +551,7 @@ public class DragonEggManager {
         String dragonName = "Dragon"; // Default name
         
         // Create the egg item
-        Item eggItem = createDragonEgg(dragonType, dragonName, eggUUID);
+        Item eggItem = createDragonEgg(dragonType, dragonName, eggUUID, player.getUniqueId());
         
         // Register the egg in the database
         plugin.getDatabaseManager().registerDragon(player.getUniqueId().toString(), eggUUID.toString(), dragonType, dragonName);

@@ -1,0 +1,79 @@
+{
+    "format_version": "1.0.0",
+    "resource_pack": {
+        "uuid": "d8b1f473-409a-44c3-b37e-5442b8683510",
+        "name": "Roki Dragon Pack",
+        "description": "Resource pack for custom dragon entities",
+        "version": [1, 0, 0]
+    },
+    "entity_textures": {
+        "roki:fire_dragon": "textures/entity/fire_dragon",
+        "roki:ice_dragon": "textures/entity/ice_dragon",
+        "roki:lightning_dragon": "textures/entity/lightning_dragon",
+        "roki:water_dragon": "textures/entity/water_dragon",
+        "roki:earth_dragon": "textures/entity/earth_dragon"
+    },
+    "entity_models": {
+        "roki:fire_dragon": "models/entity/fire_dragon",
+        "roki:ice_dragon": "models/entity/ice_dragon",
+        "roki:lightning_dragon": "models/entity/lightning_dragon",
+        "roki:water_dragon": "models/entity/water_dragon",
+        "roki:earth_dragon": "models/entity/earth_dragon"
+    },
+    "animations": {
+        "roki:fire_dragon": {
+            "fly": "animations/entity/fire_dragon/fly",
+            "idle": "animations/entity/fire_dragon/idle",
+            "attack": "animations/entity/fire_dragon/attack"
+        },
+        "roki:ice_dragon": {
+            "fly": "animations/entity/ice_dragon/fly",
+            "idle": "animations/entity/ice_dragon/idle",
+            "attack": "animations/entity/ice_dragon/attack"
+        },
+        "roki:lightning_dragon": {
+            "fly": "animations/entity/lightning_dragon/fly",
+            "idle": "animations/entity/lightning_dragon/idle", 
+            "attack": "animations/entity/lightning_dragon/attack"
+        },
+        "roki:water_dragon": {
+            "fly": "animations/entity/water_dragon/fly",
+            "idle": "animations/entity/water_dragon/idle",
+            "attack": "animations/entity/water_dragon/attack"
+        },
+        "roki:earth_dragon": {
+            "fly": "animations/entity/earth_dragon/fly",
+            "idle": "animations/entity/earth_dragon/idle",
+            "attack": "animations/entity/earth_dragon/attack"
+        }
+    },
+    "render_controllers": {
+        "roki:fire_dragon": "render_controllers/fire_dragon.render_controller",
+        "roki:ice_dragon": "render_controllers/ice_dragon.render_controller",
+        "roki:lightning_dragon": "render_controllers/lightning_dragon.render_controller",
+        "roki:water_dragon": "render_controllers/water_dragon.render_controller",
+        "roki:earth_dragon": "render_controllers/earth_dragon.render_controller"
+    },
+    "sound_definitions": {
+        "entity.fire_dragon.roar": {
+            "category": "hostile",
+            "sounds": ["sounds/entity/dragon/fire_roar"]
+        },
+        "entity.ice_dragon.roar": {
+            "category": "hostile",
+            "sounds": ["sounds/entity/dragon/ice_roar"]
+        },
+        "entity.lightning_dragon.roar": {
+            "category": "hostile",
+            "sounds": ["sounds/entity/dragon/lightning_roar"]
+        },
+        "entity.water_dragon.roar": {
+            "category": "hostile",
+            "sounds": ["sounds/entity/dragon/water_roar"]
+        },
+        "entity.earth_dragon.roar": {
+            "category": "hostile",
+            "sounds": ["sounds/entity/dragon/earth_roar"]
+        }
+    }
+} 

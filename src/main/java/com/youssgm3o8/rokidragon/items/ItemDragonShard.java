@@ -110,17 +110,74 @@ public abstract class ItemDragonShard extends Item {
     
     /**
      * Checks if an item is a Dragon Shard of any type
+     * 
+     * @param item The item to check
+     * @return true if the item is a dragon shard, false otherwise
      */
     public static boolean isDragonShard(Item item) {
-        return item != null && item.hasCompoundTag() && item.getNamedTag().getBoolean(NBT_TAG);
+        // Basic check for null
+        if (item == null) {
+            return false;
+        }
+        
+        // Check if it's one of our shard items based on class
+        if (item instanceof ItemDragonShard) {
+            return true;
+        }
+        
+        // Check NBT if it's a regular item
+        return item.hasCompoundTag() && item.getNamedTag().contains(NBT_TAG) && 
+               item.getNamedTag().getBoolean(NBT_TAG);
     }
     
     /**
      * Checks if an item is a Dragon Shard of a specific type
+     * 
+     * @param item The item to check
+     * @param type The dragon type to check for
+     * @return true if the item is a dragon shard of the specified type
      */
     public static boolean isDragonShardOfType(Item item, String type) {
-        return isDragonShard(item) && 
-               item.getNamedTag().getString("DragonShardType").equalsIgnoreCase(type);
+        if (!isDragonShard(item)) {
+            return false;
+        }
+        
+        // If it's our class instance, check the dragonType field
+        if (item instanceof ItemDragonShard) {
+            ItemDragonShard shard = (ItemDragonShard) item;
+            return shard.dragonType.equalsIgnoreCase(type);
+        }
+        
+        // Fall back to NBT check
+        if (item.hasCompoundTag()) {
+            CompoundTag tag = item.getNamedTag();
+            
+            // Check if the NBT tag has the DragonShardType
+            if (tag.contains("DragonShardType")) {
+                String shardType = tag.getString("DragonShardType");
+                
+                // Compare types (case insensitive and normalized)
+                return shardType.equalsIgnoreCase(type) || 
+                       shardType.toLowerCase().contains(type.toLowerCase()) ||
+                       type.toLowerCase().contains(shardType.toLowerCase());
+            }
+        }
+        
+        // Check based on item ID as a last resort
+        switch (type.toLowerCase()) {
+            case "fire":
+                return item.getId() == com.youssgm3o8.rokidragon.manager.DragonShardManager.FIRE_SHARD_ID;
+            case "ice":
+                return item.getId() == com.youssgm3o8.rokidragon.manager.DragonShardManager.ICE_SHARD_ID;
+            case "lightning":
+                return item.getId() == com.youssgm3o8.rokidragon.manager.DragonShardManager.LIGHTNING_SHARD_ID;
+            case "water":
+                return item.getId() == com.youssgm3o8.rokidragon.manager.DragonShardManager.WATER_SHARD_ID;
+            case "earth":
+                return item.getId() == com.youssgm3o8.rokidragon.manager.DragonShardManager.EARTH_SHARD_ID;
+            default:
+                return false;
+        }
     }
     
     /**

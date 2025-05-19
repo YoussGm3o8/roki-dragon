@@ -123,7 +123,7 @@ public class EventListenerEdit implements Listener {
                 player.attack(new cn.nukkit.event.entity.EntityDamageEvent(player, cn.nukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_EXPLOSION, 1f));
                 // --- End Egg Explosion Logic ---
                 
-                return; // Stop further processing
+                return; // Stop further processing - no contradictory messages will be sent
             }
             
             // Check if this egg was reported as lost but still exists
@@ -375,9 +375,12 @@ public class EventListenerEdit implements Listener {
         // Check for incubating eggs
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().scheduleDelayedTask(plugin, () -> {
-            // Check a bit later to ensure player data is fully loaded
-            plugin.checkAndResumeIncubation(player);
-        }, 40); // Check after 2 seconds (40 ticks)
+            // Check if player is still online before processing
+            if (player != null && player.isOnline()) {
+                // Check a bit later to ensure player data is fully loaded
+                plugin.checkAndResumeIncubation(player);
+            }
+        }, 100); // Check after 5 seconds (100 ticks) to ensure inventory is fully loaded
     }
 
     // Helper method to format time (moved here from DragonEggListener)

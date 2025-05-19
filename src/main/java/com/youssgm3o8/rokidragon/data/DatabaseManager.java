@@ -41,160 +41,37 @@ public class DatabaseManager {
     public boolean initialize() {
         plugin.getLogger().info("Initializing standalone SQLite database connection...");
         try {
-            // Load the SQLite JDBC driver (optional but good practice)
-            Class.forName("org.sqlite.JDBC"); // Load standard driver name
-
-            connection = DriverManager.getConnection(dbUrl);
-            plugin.getLogger().info("Database connection established.");
-
-            // Create tables using plain JDBC
-            try (Statement stmt = connection.createStatement()) {
-                plugin.getLogger().info("Creating tables if they do not exist...");
-
-                // Dragon Eggs Table
-                stmt.execute("CREATE TABLE IF NOT EXISTS dragon_eggs (" +
-                             "eggId TEXT PRIMARY KEY, " +
-                             "playerUUID TEXT NOT NULL, " +
-                             "dragonType TEXT, " +
-                             "dragonName TEXT, " +
-                             "hatched INTEGER DEFAULT 0, " +
-                             "incubating INTEGER DEFAULT 0, " +
-                             "incubationProgress INTEGER DEFAULT 0, " +
-                             "incubationStartTime INTEGER DEFAULT 0, " +
-                             "purchaseDate INTEGER, " +
-                             "isDead INTEGER DEFAULT 0, " +
-                             "killedBy TEXT, " +
-                             "deathTime INTEGER, " +
-                             "deathLocation TEXT, " +
-                             "dragonHealth FLOAT DEFAULT 100.0)");
-                plugin.getLogger().info("Table 'dragon_eggs' created/verified.");
-
-                // Check if death-related columns exist, add them if not
+            // Make sure SQLite JDBC driver is loaded
+            Class.forName("org.sqlite.JDBC");
+            
+            // Try to establish connection
+            connection = getConnection();
+            if (connection == null) {
+                plugin.getLogger().error("Failed to establish initial database connection. Retrying...");
+                
+                // Wait a moment and retry
                 try {
-                    ResultSet rs = stmt.executeQuery("PRAGMA table_info(dragon_eggs)");
-                    boolean hasIsDead = false;
-                    boolean hasKilledBy = false;
-                    boolean hasDeathTime = false;
-                    boolean hasDeathLocation = false;
-                    boolean hasDragonHealth = false;
-                    
-                    while (rs.next()) {
-                        String columnName = rs.getString("name");
-                        if ("isDead".equalsIgnoreCase(columnName)) {
-                            hasIsDead = true;
-                        } else if ("killedBy".equalsIgnoreCase(columnName)) {
-                            hasKilledBy = true;
-                        } else if ("deathTime".equalsIgnoreCase(columnName)) {
-                            hasDeathTime = true;
-                        } else if ("deathLocation".equalsIgnoreCase(columnName)) {
-                            hasDeathLocation = true;
-                        } else if ("dragonHealth".equalsIgnoreCase(columnName)) {
-                            hasDragonHealth = true;
-                        }
+                    Thread.sleep(1000);
+                    connection = getConnection();
+                    if (connection == null) {
+                        plugin.getLogger().error("Database connection failed after retry. Plugin functionality may be limited.");
+                    } else {
+                        plugin.getLogger().info("Database connection established on retry.");
                     }
-                    
-                    if (!hasIsDead) {
-                        plugin.getLogger().info("Adding isDead column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN isDead INTEGER DEFAULT 0");
-                    }
-                    
-                    if (!hasKilledBy) {
-                        plugin.getLogger().info("Adding killedBy column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN killedBy TEXT");
-                    }
-                    
-                    if (!hasDeathTime) {
-                        plugin.getLogger().info("Adding deathTime column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathTime INTEGER");
-                    }
-                    
-                    if (!hasDeathLocation) {
-                        plugin.getLogger().info("Adding deathLocation column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathLocation TEXT");
-                    }
-                    
-                    if (!hasDragonHealth) {
-                        plugin.getLogger().info("Adding dragonHealth column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN dragonHealth FLOAT DEFAULT 100.0");
-                    }
-                    
-                } catch (SQLException e) {
-                    plugin.getLogger().error("Error checking/adding death columns: " + e.getMessage(), e);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    plugin.getLogger().error("Thread interrupted during connection retry");
                 }
-
-                // Check if incubationStartTime column exists, add it if not
-                try {
-                    ResultSet rs = stmt.executeQuery("PRAGMA table_info(dragon_eggs)");
-                    boolean hasIncubationStartTime = false;
-                    while (rs.next()) {
-                        if ("incubationStartTime".equalsIgnoreCase(rs.getString("name"))) {
-                            hasIncubationStartTime = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!hasIncubationStartTime) {
-                        plugin.getLogger().info("Adding incubationStartTime column to dragon_eggs table...");
-                        stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN incubationStartTime INTEGER DEFAULT 0");
-                    }
-                    
-                    // Initialize any existing incubating eggs that might not have a start time
-                    String sql = "UPDATE dragon_eggs SET incubationStartTime = ? WHERE incubating = 1 AND (incubationStartTime IS NULL OR incubationStartTime = 0)";
-                    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-                        long currentTime = System.currentTimeMillis() / 1000;
-                        pstmt.setLong(1, currentTime);
-                        int updatedRows = pstmt.executeUpdate();
-                        if (updatedRows > 0) {
-                            plugin.getLogger().info("Updated start time for " + updatedRows + " existing incubating eggs");
-                        }
-                    } catch (SQLException e) {
-                        plugin.getLogger().error("Error initializing incubation start times: " + e.getMessage(), e);
-                    }
-                    
-                } catch (SQLException e) {
-                    plugin.getLogger().error("Error checking/adding incubationStartTime column: " + e.getMessage(), e);
-                }
-
-                // Dragons Table
-                stmt.execute("CREATE TABLE IF NOT EXISTS dragons (" +
-                             "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                             "playerUUID TEXT NOT NULL UNIQUE, " +
-                             "dragonEgg_id TEXT, " +
-                             "FOREIGN KEY(dragonEgg_id) REFERENCES dragon_eggs(eggId))");
-                plugin.getLogger().info("Table 'dragons' created/verified.");
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_dragons_playerUUID ON dragons(playerUUID)");
-
-
-                // Dragon Logs Table
-                stmt.execute("CREATE TABLE IF NOT EXISTS dragon_logs (" +
-                             "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                             "eggId TEXT NOT NULL, " +
-                             "playerUUID TEXT NOT NULL, " +
-                             "lostLocation TEXT, " +
-                             "logDate INTEGER)");
-                plugin.getLogger().info("Table 'dragon_logs' created/verified.");
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_playerUUID ON dragon_logs(playerUUID)");
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_eggId ON dragon_logs(eggId)");
-
-
-                // Stored Eggs Table
-                stmt.execute("CREATE TABLE IF NOT EXISTS stored_eggs (" +
-                             "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                             "playerUUID TEXT NOT NULL, " +
-                             "slotNumber INTEGER, " +
-                             "eggId TEXT NOT NULL, " +
-                             "nbtData TEXT)");
-                plugin.getLogger().info("Table 'stored_eggs' created/verified.");
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_stored_playerUUID ON stored_eggs(playerUUID)");
-
-                plugin.getLogger().info("Database tables initialized successfully.");
-                return true;
-            } catch (SQLException e) {
-                plugin.getLogger().error("Error creating database tables: " + e.getMessage(), e);
-                return false;
             }
-        } catch (SQLException | ClassNotFoundException e) {
-            plugin.getLogger().error("Error establishing database connection: " + e.getMessage(), e);
+            
+            // Create tables if they don't exist
+            createTables();
+            return true;
+        } catch (ClassNotFoundException e) {
+            plugin.getLogger().error("SQLite JDBC driver not found", e);
+            return false;
+        } catch (Exception e) {
+            plugin.getLogger().error("Error initializing database", e);
             return false;
         }
     }
@@ -337,18 +214,26 @@ public class DatabaseManager {
      * @return true if the egg is hatched
      */
     public boolean isEggHatched(String eggId) {
-        String sql = "SELECT hatched FROM dragon_eggs WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, eggId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("hatched") == 1; // Assuming 1 for true, 0 for false
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for isEggHatched");
+                return false;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT hatched FROM dragon_eggs WHERE eggId = ?");
+            stmt.setString(1, eggId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getBoolean("hatched");
+            }
+            
+            return false;
         } catch (SQLException e) {
             plugin.getLogger().error("Error checking if egg is hatched: " + e.getMessage(), e);
+            return false;
         }
-        return false; // Default to false if not found or error
     }
 
     /**
@@ -358,18 +243,26 @@ public class DatabaseManager {
      * @return The player UUID
      */
     public String getPlayerUUIDFromEggId(String eggId) {
-        String sql = "SELECT playerUUID FROM dragon_eggs WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, eggId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getString("playerUUID");
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for getPlayerUUIDFromEggId");
+                return null;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT playerUUID FROM dragon_eggs WHERE eggId = ?");
+            stmt.setString(1, eggId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getString("playerUUID");
+            }
+            
+            return null;
         } catch (SQLException e) {
             plugin.getLogger().error("Error getting player UUID from egg ID: " + e.getMessage(), e);
+            return null;
         }
-        return null;
     }
 
     /**
@@ -379,18 +272,26 @@ public class DatabaseManager {
      * @return true if the egg is incubating
      */
     public boolean isEggIncubating(String eggId) {
-        String sql = "SELECT incubating FROM dragon_eggs WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, eggId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("incubating") == 1; // Assuming 1 for true, 0 for false
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for isEggIncubating");
+                return false;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT incubating FROM dragon_eggs WHERE eggId = ?");
+            stmt.setString(1, eggId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getBoolean("incubating");
+            }
+            
+            return false;
         } catch (SQLException e) {
             plugin.getLogger().error("Error checking if egg is incubating: " + e.getMessage(), e);
+            return false;
         }
-        return false; // Default to false if not found or error
     }
 
     /**
@@ -399,14 +300,23 @@ public class DatabaseManager {
      * @param eggId The egg ID
      * @param incubating Whether the egg is incubating
      */
-    public void setEggIncubating(String eggId, boolean incubating) {
-        String sql = "UPDATE dragon_eggs SET incubating = ? WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setInt(1, incubating ? 1 : 0); // Use 1 for true, 0 for false
-            pstmt.setString(2, eggId);
-            pstmt.executeUpdate();
+    public boolean setEggIncubating(String eggId, boolean incubating) {
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for setEggIncubating");
+                return false;
+            }
+            
+            PreparedStatement stmt = conn.prepareStatement("UPDATE dragon_eggs SET incubating = ? WHERE eggId = ?");
+            stmt.setBoolean(1, incubating);
+            stmt.setString(2, eggId);
+            int updated = stmt.executeUpdate();
+            
+            return updated > 0;
         } catch (SQLException e) {
             plugin.getLogger().error("Error setting egg incubating: " + e.getMessage(), e);
+            return false;
         }
     }
 
@@ -417,18 +327,27 @@ public class DatabaseManager {
      * @return The incubating egg ID
      */
     public String getIncubatingEggId(String playerUUID) {
-        String sql = "SELECT eggId FROM dragon_eggs WHERE playerUUID = ? AND incubating = 1 LIMIT 1";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, playerUUID);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getString("eggId");
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for getIncubatingEggId");
+                return null;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT eggId FROM dragon_eggs WHERE playerUUID = ? AND incubating = ?");
+            stmt.setString(1, playerUUID);
+            stmt.setBoolean(2, true);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getString("eggId");
+            }
+            
+            return null;
         } catch (SQLException e) {
             plugin.getLogger().error("Error getting incubating egg ID: " + e.getMessage(), e);
+            return null;
         }
-        return null;
     }
 
     /**
@@ -864,7 +783,7 @@ public class DatabaseManager {
         List<Map<String, Object>> result = new ArrayList<>();
         
         // Get all eggs owned by this player from the dragon_eggs table
-        String sql = "SELECT eggId, dragonType, dragonName, hatched, incubating " +
+        String sql = "SELECT eggId, dragonType, dragonName, hatched, incubating, isDead " +
                     "FROM dragon_eggs " +
                     "WHERE playerUUID = ?";
                     
@@ -878,6 +797,7 @@ public class DatabaseManager {
                     eggData.put("type", rs.getString("dragonType"));
                     eggData.put("name", rs.getString("dragonName"));
                     eggData.put("is_hatched", rs.getInt("hatched") == 1);
+                    eggData.put("is_dead", rs.getInt("isDead") == 1);
                     // Note: 'is_active' status will be determined in the GUI logic now
                     result.add(eggData);
                 }
@@ -1030,48 +950,55 @@ public class DatabaseManager {
      * 
      * @return List of incubating eggs
      */
-    public List<IncubatingEgg> getAllIncubatingEggs() {
-        List<IncubatingEgg> incubatingEggs = new ArrayList<>();
-        String sql = "SELECT eggId, playerUUID, dragonType, dragonName, incubationProgress, incubationStartTime FROM dragon_eggs WHERE incubating = 1";
+    public List<Map<String, String>> getAllIncubatingEggs() {
+        List<Map<String, String>> eggs = new ArrayList<>();
         
-        try (PreparedStatement pstmt = connection.prepareStatement(sql);
-             ResultSet rs = pstmt.executeQuery()) {
-             
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for getAllIncubatingEggs");
+                return eggs;
+            }
+            
+            // Modified query to remove join with players table
+            PreparedStatement stmt = conn.prepareStatement(
+                "SELECT eggId, playerUUID, incubationStartTime, incubationProgress, dragonType " +
+                "FROM dragon_eggs " +
+                "WHERE incubating = ?"
+            );
+            stmt.setBoolean(1, true);
+            ResultSet rs = stmt.executeQuery();
+            
             while (rs.next()) {
-                String eggId = rs.getString("eggId");
-                String playerUUID = rs.getString("playerUUID");
-                String dragonType = rs.getString("dragonType");
-                String dragonName = rs.getString("dragonName");
-                int incubationProgress = rs.getInt("incubationProgress");
+                Map<String, String> egg = new HashMap<>();
+                egg.put("eggId", rs.getString("eggId"));
+                egg.put("playerUUID", rs.getString("playerUUID"));
+                egg.put("incubationStartTime", String.valueOf(rs.getLong("incubationStartTime")));
+                egg.put("incubationProgress", String.valueOf(rs.getInt("incubationProgress")));
+                egg.put("dragonType", rs.getString("dragonType"));
                 
-                // Get the incubation start time from database
-                long incubationStartTime = rs.getLong("incubationStartTime");
-                
-                // If start time is 0 or not set, use current time but log a warning
-                if (incubationStartTime == 0) {
-                    plugin.getLogger().warning("Found incubating egg " + eggId + " with no start time! Setting to current time.");
-                    incubationStartTime = System.currentTimeMillis() / 1000;
-                    // Update it in the database
-                    updateIncubationStartTime(eggId, incubationStartTime);
+                // Try to get player name from server instead of database
+                try {
+                    UUID playerUUID = UUID.fromString(egg.get("playerUUID"));
+                    Player player = plugin.getServer().getPlayer(playerUUID).orElse(null);
+                    if (player != null) {
+                        egg.put("playerName", player.getName());
+                    } else {
+                        egg.put("playerName", "Unknown");
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to get player name for UUID: " + egg.get("playerUUID"));
+                    egg.put("playerName", "Unknown");
                 }
                 
-                IncubatingEgg incubatingEgg = new IncubatingEgg(
-                    eggId,
-                    playerUUID,
-                    dragonType,
-                    (dragonName == null || dragonName.trim().isEmpty()) ? "Dragon" : dragonName, // Default name
-                    incubationStartTime,
-                    incubationProgress
-                );
-                incubatingEggs.add(incubatingEgg);
-                
-                plugin.getLogger().info("Found incubating egg: " + eggId + " for player " + playerUUID + 
-                                       " with progress " + incubationProgress + " seconds, start time: " + incubationStartTime);
+                eggs.add(egg);
             }
+            
+            return eggs;
         } catch (SQLException e) {
             plugin.getLogger().error("Error getting all incubating eggs: " + e.getMessage(), e);
+            return eggs;
         }
-        return incubatingEggs;
     }
 
     /**
@@ -1113,30 +1040,23 @@ public class DatabaseManager {
      * @param eggId The egg ID
      * @param startTime The incubation start time in seconds
      */
-    public void updateIncubationStartTime(String eggId, long startTime) {
-        if (eggId == null || eggId.isEmpty()) {
-            plugin.getLogger().error("Cannot update incubation start time: eggId is null or empty");
-            return;
-        }
-        
-        if (startTime <= 0) {
-            plugin.getLogger().error("Cannot update incubation start time: time is invalid: " + startTime);
-            return;
-        }
-        
-        String sql = "UPDATE dragon_eggs SET incubationStartTime = ? WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setLong(1, startTime);
-            pstmt.setString(2, eggId);
-            int rowsUpdated = pstmt.executeUpdate();
-            
-            if (rowsUpdated > 0) {
-                plugin.getLogger().info("Updated incubation start time for egg " + eggId + " to " + startTime);
-            } else {
-                plugin.getLogger().warning("Failed to update incubation start time: egg ID not found in database: " + eggId);
+    public boolean updateIncubationStartTime(String eggId, long startTime) {
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for updateIncubationStartTime");
+                return false;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("UPDATE dragon_eggs SET incubationStartTime = ? WHERE eggId = ?");
+            stmt.setLong(1, startTime);
+            stmt.setString(2, eggId);
+            int updated = stmt.executeUpdate();
+            
+            return updated > 0;
         } catch (SQLException e) {
             plugin.getLogger().error("Error updating incubation start time: " + e.getMessage(), e);
+            return false;
         }
     }
 
@@ -1486,18 +1406,26 @@ public class DatabaseManager {
      * @return The incubation start time in seconds, or 0 if not set
      */
     public long getEggIncubationStartTime(String eggId) {
-        String sql = "SELECT incubationStartTime FROM dragon_eggs WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, eggId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getLong("incubationStartTime");
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for getEggIncubationStartTime");
+                return 0;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT incubationStartTime FROM dragon_eggs WHERE eggId = ?");
+            stmt.setString(1, eggId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getLong("incubationStartTime");
+            }
+            
+            return 0;
         } catch (SQLException e) {
             plugin.getLogger().error("Error getting egg incubation start time: " + e.getMessage(), e);
+            return 0;
         }
-        return 0;
     }
 
     /**
@@ -1644,18 +1572,26 @@ public class DatabaseManager {
      * @return true if the dragon is marked as dead
      */
     public boolean isDragonDead(String eggId) {
-        String sql = "SELECT isDead FROM dragon_eggs WHERE eggId = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, eggId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("isDead") == 1;
-                }
+        try {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().error("Failed to get database connection for isDragonDead");
+                return false;
             }
+            
+            PreparedStatement stmt = conn.prepareStatement("SELECT isDead FROM dragon_eggs WHERE eggId = ?");
+            stmt.setString(1, eggId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getBoolean("isDead");
+            }
+            
+            return false;
         } catch (SQLException e) {
             plugin.getLogger().error("Error checking if dragon is dead: " + e.getMessage(), e);
+            return false;
         }
-        return false;
     }
     
     /**
@@ -1768,6 +1704,7 @@ public class DatabaseManager {
         // Use the existing connection or create a new one if needed
         if (connection == null || connection.isClosed()) {
             connection = DriverManager.getConnection(dbUrl);
+            plugin.getLogger().info("Database connection reestablished");
         }
         return connection;
     }
@@ -1811,5 +1748,195 @@ public class DatabaseManager {
             plugin.getLogger().error("Error getting dragon health: " + e.getMessage(), e);
         }
         return 100.0f; // Return default max health if not found
+    }
+
+    private void createTables() {
+        try (Statement stmt = connection.createStatement()) {
+            plugin.getLogger().info("Creating tables if they do not exist...");
+
+            // Players Table
+            stmt.execute("CREATE TABLE IF NOT EXISTS players (" +
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "uuid TEXT NOT NULL UNIQUE, " +
+                         "name TEXT, " +
+                         "last_seen INTEGER)");
+            plugin.getLogger().info("Table 'players' created/verified.");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_players_uuid ON players(uuid)");
+            
+            // Dragon Eggs Table
+            stmt.execute("CREATE TABLE IF NOT EXISTS dragon_eggs (" +
+                         "eggId TEXT PRIMARY KEY, " +
+                         "playerUUID TEXT NOT NULL, " +
+                         "dragonType TEXT, " +
+                         "dragonName TEXT, " +
+                         "hatched INTEGER DEFAULT 0, " +
+                         "incubating INTEGER DEFAULT 0, " +
+                         "incubationProgress INTEGER DEFAULT 0, " +
+                         "incubationStartTime INTEGER DEFAULT 0, " +
+                         "purchaseDate INTEGER, " +
+                         "isDead INTEGER DEFAULT 0, " +
+                         "killedBy TEXT, " +
+                         "deathTime INTEGER, " +
+                         "deathLocation TEXT, " +
+                         "dragonHealth FLOAT DEFAULT 100.0)");
+            plugin.getLogger().info("Table 'dragon_eggs' created/verified.");
+            
+            // Check if death-related columns exist, add them if not
+            try {
+                ResultSet rs = stmt.executeQuery("PRAGMA table_info(dragon_eggs)");
+                boolean hasIsDead = false;
+                boolean hasKilledBy = false;
+                boolean hasDeathTime = false;
+                boolean hasDeathLocation = false;
+                boolean hasDragonHealth = false;
+                
+                while (rs.next()) {
+                    String columnName = rs.getString("name");
+                    if ("isDead".equalsIgnoreCase(columnName)) {
+                        hasIsDead = true;
+                    } else if ("killedBy".equalsIgnoreCase(columnName)) {
+                        hasKilledBy = true;
+                    } else if ("deathTime".equalsIgnoreCase(columnName)) {
+                        hasDeathTime = true;
+                    } else if ("deathLocation".equalsIgnoreCase(columnName)) {
+                        hasDeathLocation = true;
+                    } else if ("dragonHealth".equalsIgnoreCase(columnName)) {
+                        hasDragonHealth = true;
+                    }
+                }
+                
+                if (!hasIsDead) {
+                    plugin.getLogger().info("Adding isDead column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN isDead INTEGER DEFAULT 0");
+                }
+                
+                if (!hasKilledBy) {
+                    plugin.getLogger().info("Adding killedBy column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN killedBy TEXT");
+                }
+                
+                if (!hasDeathTime) {
+                    plugin.getLogger().info("Adding deathTime column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathTime INTEGER");
+                }
+                
+                if (!hasDeathLocation) {
+                    plugin.getLogger().info("Adding deathLocation column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN deathLocation TEXT");
+                }
+                
+                if (!hasDragonHealth) {
+                    plugin.getLogger().info("Adding dragonHealth column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN dragonHealth FLOAT DEFAULT 100.0");
+                }
+                
+            } catch (SQLException e) {
+                plugin.getLogger().error("Error checking/adding death columns: " + e.getMessage(), e);
+            }
+
+            // Check if incubationStartTime column exists, add it if not
+            try {
+                ResultSet rs = stmt.executeQuery("PRAGMA table_info(dragon_eggs)");
+                boolean hasIncubationStartTime = false;
+                while (rs.next()) {
+                    if ("incubationStartTime".equalsIgnoreCase(rs.getString("name"))) {
+                        hasIncubationStartTime = true;
+                        break;
+                    }
+                }
+                
+                if (!hasIncubationStartTime) {
+                    plugin.getLogger().info("Adding incubationStartTime column to dragon_eggs table...");
+                    stmt.execute("ALTER TABLE dragon_eggs ADD COLUMN incubationStartTime INTEGER DEFAULT 0");
+                }
+                
+                // Initialize any existing incubating eggs that might not have a start time
+                String sql = "UPDATE dragon_eggs SET incubationStartTime = ? WHERE incubating = 1 AND (incubationStartTime IS NULL OR incubationStartTime = 0)";
+                try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                    long currentTime = System.currentTimeMillis() / 1000;
+                    pstmt.setLong(1, currentTime);
+                    int updatedRows = pstmt.executeUpdate();
+                    if (updatedRows > 0) {
+                        plugin.getLogger().info("Updated start time for " + updatedRows + " existing incubating eggs");
+                    }
+                } catch (SQLException e) {
+                    plugin.getLogger().error("Error initializing incubation start times: " + e.getMessage(), e);
+                }
+                
+            } catch (SQLException e) {
+                plugin.getLogger().error("Error checking/adding incubationStartTime column: " + e.getMessage(), e);
+            }
+
+            // Dragons Table
+            stmt.execute("CREATE TABLE IF NOT EXISTS dragons (" +
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "playerUUID TEXT NOT NULL UNIQUE, " +
+                         "dragonEgg_id TEXT, " +
+                         "FOREIGN KEY(dragonEgg_id) REFERENCES dragon_eggs(eggId))");
+            plugin.getLogger().info("Table 'dragons' created/verified.");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_dragons_playerUUID ON dragons(playerUUID)");
+
+
+            // Dragon Logs Table
+            stmt.execute("CREATE TABLE IF NOT EXISTS dragon_logs (" +
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "eggId TEXT NOT NULL, " +
+                         "playerUUID TEXT NOT NULL, " +
+                         "lostLocation TEXT, " +
+                         "logDate INTEGER)");
+            plugin.getLogger().info("Table 'dragon_logs' created/verified.");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_playerUUID ON dragon_logs(playerUUID)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_eggId ON dragon_logs(eggId)");
+
+
+            // Stored Eggs Table
+            stmt.execute("CREATE TABLE IF NOT EXISTS stored_eggs (" +
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "playerUUID TEXT NOT NULL, " +
+                         "slotNumber INTEGER, " +
+                         "eggId TEXT NOT NULL, " +
+                         "nbtData TEXT)");
+            plugin.getLogger().info("Table 'stored_eggs' created/verified.");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_stored_playerUUID ON stored_eggs(playerUUID)");
+
+            plugin.getLogger().info("Database tables initialized successfully.");
+        } catch (SQLException e) {
+            plugin.getLogger().error("Error creating database tables: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Checks the database connection and reconnects if necessary.
+     * This method should be called periodically to ensure the connection stays alive.
+     * 
+     * @return true if connection is valid or was successfully reconnected, false otherwise
+     */
+    public boolean checkConnection() {
+        try {
+            // Try to validate the connection
+            if (connection == null || connection.isClosed()) {
+                plugin.getLogger().info("Database connection is closed. Attempting to reconnect...");
+                connection = getConnection();
+                return connection != null && !connection.isClosed();
+            }
+            
+            // SQLite doesn't support isValid, so we do a simple test query
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeQuery("SELECT 1").next();
+                return true;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().error("Database connection check failed: " + e.getMessage(), e);
+            plugin.getLogger().info("Attempting to reconnect...");
+            
+            try {
+                // Try to reconnect
+                connection = getConnection();
+                return connection != null && !connection.isClosed();
+            } catch (SQLException reconnectException) {
+                plugin.getLogger().error("Failed to reconnect to database: " + reconnectException.getMessage(), reconnectException);
+                return false;
+            }
+        }
     }
 } 

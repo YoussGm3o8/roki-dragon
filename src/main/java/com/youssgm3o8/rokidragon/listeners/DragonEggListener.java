@@ -102,11 +102,51 @@ public class DragonEggListener implements Listener {
         String ownerUUID = plugin.getDatabaseManager().getPlayerUUIDFromEggId(eggId);
         boolean isPlayerEgg = ownerUUID != null && ownerUUID.equals(playerUUID);
 
+        // If database check fails, also check NBT data for ownership
+        if (!isPlayerEgg && tag.contains("OwnerUUID")) {
+            String nbtOwnerUUID = tag.getString("OwnerUUID");
+            isPlayerEgg = nbtOwnerUUID != null && nbtOwnerUUID.equals(playerUUID);
+            if (isPlayerEgg) {
+                plugin.getLogger().info("Egg ownership verified through NBT data for player " + player.getName());
+            }
+        }
+
+        // Check if the egg is dead
+        boolean isDead = plugin.getDatabaseManager().isDragonDead(eggId);
+
+        // If the egg is dead, handle it differently regardless of ownership
+        if (isDead) {
+            // Get the dragon's name
+            String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
+            if (dragonName == null || dragonName.isEmpty()) {
+                dragonName = "Dragon";
+            }
+            
+            // Get death information
+            Map<String, Object> deathInfo = plugin.getDatabaseManager().getDragonDeathInfo(eggId);
+            String killedBy = "Unknown";
+            if (deathInfo != null && deathInfo.containsKey("killedBy")) {
+                killedBy = (String) deathInfo.get("killedBy");
+            }
+            
+            // Send death message - use the dragonDeathMessage from egg section
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.egg.dragonDeathMessage", 
+                TextFormat.BOLD + dragonName + TextFormat.RESET + TextFormat.RED,
+                killedBy));
+            
+            // Also send the dragonIsDead message from errors section
+            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.dragonIsDead"));
+            
+            // Add message about not counting toward limit
+            player.sendMessage(TextFormat.GREEN + "This deceased dragon does not count toward your dragon limit.");
+            
+            return; // Don't allow any interaction with dead eggs
+        }
+        
         if (!isPlayerEgg) {
-            // Add a check for admin override if desired (e.g., using a permission)
-            // if (!player.hasPermission("rokidragon.admin.interactall")) { ... }
+            // Send ownership error message and exit immediately
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.eggNotBelongToYou"));
-            return;
+            return; // Do not process any further to avoid contradictory messages
         }
         
         // Get egg status
@@ -125,12 +165,19 @@ public class DragonEggListener implements Listener {
      * Handle egg incubation toggle (shift-right-click)
      */
     private void handleEggIncubation(Player player, Item item, String eggId, boolean isHatched) {
+        // Double-check ownership for extra safety
+        String playerUUID = player.getUniqueId().toString();
+        String ownerUUID = plugin.getDatabaseManager().getPlayerUUIDFromEggId(eggId);
+        if (ownerUUID == null || !ownerUUID.equals(playerUUID)) {
+            // If we somehow got here without proper ownership, just return without messages
+            plugin.getLogger().warning("Attempt to incubate egg " + eggId + " by non-owner " + player.getName());
+            return;
+        }
+        
         if (isHatched) {
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.eggAlreadyHatched"));
             return;
         }
-        
-        String playerUUID = player.getUniqueId().toString();
         
         // Check if another egg is already incubating
         String incubatingEggId = plugin.getDatabaseManager().getIncubatingEggId(playerUUID);
@@ -219,32 +266,13 @@ public class DragonEggListener implements Listener {
      * Handle regular egg interaction (right-click without shift)
      */
     private void handleEggInteraction(Player player, String eggId, boolean isHatched) {
-        // First check if the dragon is dead
-        boolean isDead = plugin.getDatabaseManager().isDragonDead(eggId);
-        
-        if (isDead) {
-            // Get the dragon's name
-            String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
-            if (dragonName == null || dragonName.isEmpty()) {
-                dragonName = "Your dragon";
-            }
-            
-            // Get death information
-            Map<String, Object> deathInfo = plugin.getDatabaseManager().getDragonDeathInfo(eggId);
-            String killedBy = "Unknown";
-            if (deathInfo != null && deathInfo.containsKey("killedBy")) {
-                killedBy = (String) deathInfo.get("killedBy");
-            }
-            
-            // Send death message
-            player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.egg.dragonDeathMessage", 
-                TextFormat.BOLD + dragonName + TextFormat.RESET + TextFormat.RED,
-                killedBy));
-            
-            // Add message about not counting toward limit
-            player.sendMessage(TextFormat.GREEN + "This deceased dragon does not count toward your dragon limit.");
-            
-            return; // Don't proceed with summoning
+        // Double-check ownership for extra safety
+        String playerUUID = player.getUniqueId().toString();
+        String ownerUUID = plugin.getDatabaseManager().getPlayerUUIDFromEggId(eggId);
+        if (ownerUUID == null || !ownerUUID.equals(playerUUID)) {
+            // If we somehow got here without proper ownership, just return without messages
+            plugin.getLogger().warning("Attempt to interact with egg " + eggId + " by non-owner " + player.getName());
+            return;
         }
         
         if (isHatched) {
@@ -273,7 +301,7 @@ public class DragonEggListener implements Listener {
                 summonDragon(player, eggId);
             }
         } else {
-            // Revert: Original logic - Inform player to use shift-right-click
+            // Inform player to use shift-right-click
             player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.errors.needShiftClick"));
         }
     }
@@ -282,6 +310,15 @@ public class DragonEggListener implements Listener {
      * Summon the player's dragon using the specific egg ID
      */
     private void summonDragon(Player player, String eggId) {
+        // Double-check ownership for extra safety
+        String playerUUID = player.getUniqueId().toString();
+        String ownerUUID = plugin.getDatabaseManager().getPlayerUUIDFromEggId(eggId);
+        if (ownerUUID == null || !ownerUUID.equals(playerUUID)) {
+            // If we somehow got here without proper ownership, just return without messages
+            plugin.getLogger().warning("Attempt to summon dragon from egg " + eggId + " by non-owner " + player.getName());
+            return;
+        }
+        
         // Check for cooldown
         if (plugin.isOnCooldown(player.getName())) {
             long remainingSeconds = plugin.getCooldownTime(player.getName());
@@ -305,6 +342,14 @@ public class DragonEggListener implements Listener {
         String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
         String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
         
+        // Check if the dragon needs to be named (first summoning)
+        boolean needsNaming = dragonName == null || dragonName.trim().isEmpty() || "Dragon".equals(dragonName.trim());
+        if (needsNaming) {
+            // Dragon hasn't been named yet, open the naming form
+            plugin.getDragonGUI().openFirstNamingForm(player, eggId);
+            return;
+        }
+        
         // Summon the specific dragon using the egg ID
         DragonEntity dragon = plugin.getDragonManager().spawnDragon(
             dragonType,
@@ -322,6 +367,9 @@ public class DragonEggListener implements Listener {
             // Set cooldown
             int summonCooldown = plugin.getConfig().getInt("timing.cooldowns.summon_seconds", 30);
             plugin.setCooldown(player.getName(), summonCooldown);
+            
+            // Send success message (let the DragonManager handle this to avoid duplicates)
+            // We rely on DragonManager or DragonPlugin to send the success message
         } else {
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.summonFailed"));
             // Suggest a solution to the player

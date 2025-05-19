@@ -152,8 +152,14 @@ public class DragonManager {
             // Spawn the entity in the world
             dragon.spawnToAll();
             
-            player.sendMessage(TextFormat.GREEN + "Your " + TextFormat.YELLOW + dragonName + 
-                    TextFormat.GREEN + " has been summoned!");
+            // Send success message using language key
+            player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.dragonSummoned"));
+            
+            // Send dragon tips only on first summon if this is a new dragon
+            boolean isFirstTime = "Dragon".equals(dragonName) || dragonName == null || dragonName.isEmpty(); 
+            if (isFirstTime) {
+                player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.info.dragonExplained"));
+            }
             
             plugin.getLogger().info("Dragon successfully spawned!");
             return dragon;

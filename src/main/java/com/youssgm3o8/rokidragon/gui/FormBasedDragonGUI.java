@@ -59,6 +59,7 @@ public class FormBasedDragonGUI {
     public static final int FORM_CUSTOMIZATION_ERROR = 1825503147; // hash of "com.youssgm3o8.rokidragon.customizationerror"
     public static final int FORM_PURCHASE_RESULT = 1389003045; // hash of "com.youssgm3o8.rokidragon.purchaseresult"
     public static final int FORM_PURCHASE_ERROR = 1272975774; // hash of "com.youssgm3o8.rokidragon.purchaseerror"
+    public static final int FORM_PURCHASE_DIRECT_STORAGE = 1378452093; // hash of "com.youssgm3o8.rokidragon.purchasedirectstorage"
     public static final int FORM_INVENTORY_STORAGE = 1738651224; // hash of "com.youssgm3o8.rokidragon.inventorystorage"
     public static final int FORM_FIRST_NAMING = 571937880; // hash of "com.youssgm3o8.rokidragon.firstnaming"
     
@@ -297,12 +298,19 @@ public class FormBasedDragonGUI {
         if (playerEggs.isEmpty()) {
             form.setContent(form.getContent() + "\n" + TextFormat.RED + "You don't have any dragon eggs.");
         } else {
+            int liveEggCount = 0;
+            
             // Add each egg as a button
             for (Map<String, Object> eggData : playerEggs) {
                 String eggId = (String) eggData.get("egg_id");
                 String eggName = (String) eggData.get("name");
                 String eggType = (String) eggData.get("type");
                 boolean isHatched = (boolean) eggData.get("is_hatched");
+                boolean isDead = eggData.containsKey("is_dead") && (boolean) eggData.get("is_dead");
+                
+                if (!isDead) {
+                    liveEggCount++; // Only count live eggs towards the limit
+                }
                 
                 // Check if this egg corresponds to the currently active dragon
                 boolean isActive = false;
@@ -318,7 +326,10 @@ public class FormBasedDragonGUI {
                 // Use correct key structure with messages prefix
                 String langKey = "messages.lostEgg.menu.egg_status_egg"; // Default key
 
-                if (isActive) {
+                if (isDead) {
+                    langKey = "messages.lostEgg.menu.egg_status_dead";
+                    statusColor = TextFormat.RED.toString();
+                } else if (isActive) {
                     // Use correct key structure
                     langKey = "messages.lostEgg.menu.egg_status_active";
                     statusColor = TextFormat.AQUA.toString();
@@ -350,6 +361,12 @@ public class FormBasedDragonGUI {
                 plugin.getLogger().info("[Form Debug] Storing in playerSelectedEggs: Key=\'" + mapKey + "\', Value=\'" + eggId + "\'");
                 // *** END LOGGING ***
             }
+            
+            // Add the egg count information at the top
+            int maxEggs = plugin.getConfig().getInt("gui.storage_size", 5);
+            form.setContent(TextFormat.GOLD + "Select a dragon egg to report as lost:\n" +
+                            TextFormat.YELLOW + "Active Dragons: " + liveEggCount + "/" + maxEggs + 
+                            TextFormat.GRAY + " (Dead dragons don't count towards your limit)");
         }
         
         // Add a back button
@@ -659,6 +676,11 @@ public class FormBasedDragonGUI {
                 openMainMenu(player);
                 break;
                 
+            case FORM_PURCHASE_DIRECT_STORAGE:
+                // Handle direct storage purchase option
+                handleDirectStoragePurchaseResponse(player, (boolean) response);
+                break;
+                
             case FORM_FIRST_NAMING:
                 // Check response type before casting
                 if (response instanceof FormResponseCustom) {
@@ -725,7 +747,18 @@ public class FormBasedDragonGUI {
             // Add the egg to player's inventory
             if (player.getInventory().canAddItem(eggItem)) {
                 player.getInventory().addItem(eggItem);
-                player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggRetrieved"));
+                
+                // Get dragon info for the message
+                Map<String, Object> eggData = databaseManager.getEggById(eggId);
+                if (eggData != null) {
+                    String dragonType = (String) eggData.get("type");
+                    String dragonName = (String) eggData.get("name");
+                    String coloredName = DragonUtils.getColorByType(dragonType) + dragonName;
+                    player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggRetrieved", coloredName));
+                } else {
+                    // Fallback in case egg data can't be found
+                    player.sendMessage(TextFormat.GREEN + plugin.getLanguageString("messages.success.eggRetrieved", eggId));
+                }
             } else {
                 player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.inventoryFull"));
                 databaseManager.storeEgg(player.getName(), eggId); // Put it back in storage
@@ -981,35 +1014,51 @@ public class FormBasedDragonGUI {
             return;
         }
         
+        // Check if player's inventory has space for a dragon egg
+        boolean hasInventorySpace = player.getInventory().canAddItem(Item.get(Item.DRAGON_EGG, 0, 1));
+        
+        // If player has no inventory space, check if we should automatically store it
+        if (!hasInventorySpace) {
+            // If player has space in storage, we can offer to store it directly
+            if (totalEggs < maxEggs) {
+                // Show option to store directly or cancel
+                FormWindowModal storeForm = new FormWindowModal(
+                    TextFormat.YELLOW + "Inventory Full",
+                    TextFormat.YELLOW + plugin.getLanguageString("messages.errors.inventoryFull") + "\n\n" +
+                    TextFormat.WHITE + "Would you like to purchase the egg and store it directly in your dragon storage?",
+                    TextFormat.GREEN + "Purchase & Store",
+                    TextFormat.RED + "Cancel"
+                );
+                player.showFormWindow(storeForm, FORM_PURCHASE_DIRECT_STORAGE);
+                return;
+            } else {
+                // Show inventory full error in a form
+                FormWindowModal errorForm = new FormWindowModal(
+                    TextFormat.RED + "Inventory Full",
+                    TextFormat.RED + plugin.getLanguageString("messages.errors.inventoryFull") + " " +
+                    TextFormat.YELLOW + "Free up an inventory slot before purchasing a dragon egg.",
+                    TextFormat.AQUA + "Back to Main Menu",
+                    TextFormat.RED + "Close"
+                );
+                player.showFormWindow(errorForm, FORM_PURCHASE_ERROR);
+                return;
+            }
+        }
+        
         // Process purchase
         if (EconomyAPI.getInstance().reduceMoney(player, price) == EconomyAPI.RET_SUCCESS) {
             // Create and give egg
             Item eggItem = eggManager.createNewDragonEgg(player);
-            if (player.getInventory().canAddItem(eggItem)) {
-                player.getInventory().addItem(eggItem);
-                
-                // Show success message in a form
-                FormWindowModal resultForm = new FormWindowModal(
-                    TextFormat.GREEN + "Egg Purchased",
-                    TextFormat.GREEN + plugin.getLanguageString("messages.success.eggPurchased", price),
-                    TextFormat.AQUA + "Back to Main Menu",
-                    TextFormat.RED + "Close"
-                );
-                player.showFormWindow(resultForm, FORM_PURCHASE_RESULT);
-            } else {
-                // Store the egg if inventory is full
-                String eggId = eggItem.getNamedTag().getString("dragon_egg_id");
-                databaseManager.storeEgg(player.getName(), eggId);
-                
-                // Show stored notification in a form
-                FormWindowModal resultForm = new FormWindowModal(
-                    TextFormat.YELLOW + "Egg Stored",
-                    TextFormat.YELLOW + plugin.getLanguageString("messages.success.eggStoredFull"),
-                    TextFormat.AQUA + "Back to Main Menu",
-                    TextFormat.RED + "Close"
-                );
-                player.showFormWindow(resultForm, FORM_PURCHASE_RESULT);
-            }
+            player.getInventory().addItem(eggItem);
+            
+            // Show success message in a form
+            FormWindowModal resultForm = new FormWindowModal(
+                TextFormat.GREEN + "Egg Purchased",
+                TextFormat.GREEN + plugin.getLanguageString("messages.success.eggPurchased", price),
+                TextFormat.AQUA + "Back to Main Menu",
+                TextFormat.RED + "Close"
+            );
+            player.showFormWindow(resultForm, FORM_PURCHASE_RESULT);
         } else {
             // Show purchase failed error in a form
             FormWindowModal errorForm = new FormWindowModal(
@@ -1263,21 +1312,45 @@ public class FormBasedDragonGUI {
      * Handle response from the first naming form.
      */
     public void handleFirstNamingResponse(Player player, FormResponseCustom response) {
+        plugin.getLogger().info("[Form Debug] Starting handleFirstNamingResponse for player " + player.getName());
+        
         if (response == null) {
+            plugin.getLogger().warning("[Form Debug] Null response for first naming form from " + player.getName());
             player.sendMessage(TextFormat.YELLOW + "You need to name your dragon before summoning it.");
             return;
         }
         
         String eggId = playerSelectedEggs.remove(player.getName() + "_namingEggId");
         if (eggId == null) {
+            plugin.getLogger().warning("[Form Debug] Could not find egg ID in playerSelectedEggs map for " + player.getName());
             player.sendMessage(TextFormat.RED + "Error: Could not find egg data for naming.");
             return;
         }
         
+        plugin.getLogger().info("[Form Debug] Found eggId for naming: " + eggId);
+        
         // Get the entered name
-        String name = response.getInputResponse(1);
+        String name = null;
+        try {
+            name = response.getInputResponse(1);
+            plugin.getLogger().info("[Form Debug] Retrieved name from form: '" + name + "'");
+        } catch (Exception e) {
+            plugin.getLogger().error("[Form Debug] Error getting name from form: " + e.getMessage());
+            name = "Your Dragon"; // Default name if there's an error
+        }
+        
         if (name == null || name.trim().isEmpty()) {
-            name = "Dragon"; // Default name if empty
+            plugin.getLogger().info("[Form Debug] Name was null or empty, using default name");
+            name = "Your Dragon"; // Changed default name
+        }
+        
+        // Check if name is just "Dragon" or variations of it
+        if (name.trim().equalsIgnoreCase("dragon")) {
+            plugin.getLogger().info("[Form Debug] Name was just 'Dragon', asking for a more unique name");
+            player.sendMessage(TextFormat.RED + "Please choose a more unique name for your dragon than just 'Dragon'.");
+            // Re-open the form if name is just "Dragon"
+            openFirstNamingForm(player, eggId);
+            return;
         }
         
         // Validate name length
@@ -1285,6 +1358,8 @@ public class FormBasedDragonGUI {
         int maxNameLength = plugin.getConfig().getInt("dragon_settings.max_name_length", 16);
         
         if (name.length() < minNameLength || name.length() > maxNameLength) {
+            plugin.getLogger().info("[Form Debug] Name length invalid: " + name.length() + 
+                                   ", required: " + minNameLength + "-" + maxNameLength);
             player.sendMessage(TextFormat.RED + MessageFormat.format(
                 plugin.getLanguageString("messages.errors.nameLength"),
                 minNameLength, maxNameLength
@@ -1294,29 +1369,35 @@ public class FormBasedDragonGUI {
             return;
         }
         
+        // Get dragon type before updating the name
+        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
+        
         // Update the dragon name in database
         plugin.getDatabaseManager().setDragonName(eggId, name);
+        
+        // Create colored name for display
+        String coloredName = DragonUtils.getColorByType(dragonType) + name;
+        
+        plugin.getLogger().info("[Form Debug] Successfully updated dragon name in database to: " + name);
         player.sendMessage(TextFormat.GREEN + MessageFormat.format(
             plugin.getLanguageString("messages.success.dragonRenamed"),
-            name
+            coloredName
         ));
         
         // Now handle summoning the newly named dragon
         plugin.getLogger().info("First-time dragon naming completed for " + eggId + ", name: " + name);
         
         // Give initial dragon shards as a gift for first hatched dragon
-        String dragonTypeForShards = plugin.getDatabaseManager().getDragonType(eggId);
-        if (dragonTypeForShards != null) {
-            plugin.getShardManager().giveInitialShards(dragonTypeForShards, player);
+        if (dragonType != null) {
+            plugin.getShardManager().giveInitialShards(dragonType, player);
         }
         
-        // Now summon the dragon after naming and giving shards
-        String dragonType = plugin.getDatabaseManager().getDragonType(eggId);
-        String dragonName = plugin.getDatabaseManager().getDragonName(eggId);
-
+        plugin.getLogger().info("[Form Debug] Attempting to spawn dragon after naming. Type: " + 
+                               dragonType + ", Name: " + name);
+        
         DragonEntity dragon = plugin.getDragonManager().spawnDragon(
             dragonType,
-            dragonName,
+            name,
             UUID.fromString(eggId),
             player.getLevel(),
             player.getPosition(),
@@ -1324,15 +1405,133 @@ public class FormBasedDragonGUI {
         );
 
         if (dragon != null) {
+            plugin.getLogger().info("[Form Debug] Successfully spawned dragon for " + player.getName());
             // Register the dragon using the new method
             plugin.registerActiveDragon(player, dragon);
             
             // Set cooldown
             int summonCooldown = plugin.getConfig().getInt("timing.cooldowns.summon_seconds", 30);
             plugin.setCooldown(player.getName(), summonCooldown);
+            
+            // Update the egg lore to show the new name
+            for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
+                Item item = player.getInventory().getItem(slot);
+                if (plugin.getEggManager().isDragonEgg(item)) {
+                    UUID eggUUID = plugin.getEggManager().getDragonUUID(item);
+                    if (eggUUID != null && eggUUID.toString().equals(eggId)) {
+                        plugin.getEggManager().updateEggLore(item, eggId);
+                        player.getInventory().setItem(slot, item);
+                    }
+                }
+            }
+            
+            // DragonManager will handle the success message
         } else {
+            plugin.getLogger().warning("[Form Debug] Failed to spawn dragon for " + player.getName() + " after naming");
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.summonFailed"));
             player.sendMessage(TextFormat.YELLOW + "Try moving to a different location or relogging.");
+        }
+    }
+
+    /**
+     * Process direct storage purchase confirmation
+     */
+    private void handleDirectStoragePurchaseResponse(Player player, boolean confirmed) {
+        if (!confirmed) {
+            player.sendMessage(TextFormat.YELLOW + plugin.getLanguageString("messages.success.purchaseCancelled"));
+            openMainMenu(player);
+            return;
+        }
+        
+        int price = plugin.getConfig().getInt("economy.dragon_egg_price", 128000);
+        
+        // Check if economy is available
+        if (!isEconomyAvailable()) {
+            // Show error in a form
+            FormWindowModal errorForm = new FormWindowModal(
+                TextFormat.RED + "Economy Not Available",
+                TextFormat.RED + plugin.getLanguageString("messages.errors.economyNotFound"),
+                TextFormat.AQUA + "Back to Main Menu",
+                TextFormat.RED + "Close"
+            );
+            player.showFormWindow(errorForm, FORM_PURCHASE_ERROR);
+            return;
+        }
+        
+        // Check player balance
+        double balance = EconomyAPI.getInstance().myMoney(player);
+        if (balance < price) {
+            // Show not enough money error in a form
+            FormWindowModal errorForm = new FormWindowModal(
+                TextFormat.RED + "Insufficient Funds",
+                TextFormat.RED + plugin.getLanguageString("messages.errors.notEnoughMoney"),
+                TextFormat.AQUA + "Back to Main Menu",
+                TextFormat.RED + "Close"
+            );
+            player.showFormWindow(errorForm, FORM_PURCHASE_ERROR);
+            return;
+        }
+        
+        // Get all eggs owned by player (including stored and regular dragon eggs)
+        List<Map<String, Object>> allEggs = databaseManager.getAllEggsForPlayer(player.getUniqueId().toString());
+        int totalEggs = allEggs.size();
+        int maxEggs = DragonEggManager.MAX_EGGS_PER_PLAYER;
+        
+        // Check total egg limit (including all types of eggs)
+        if (totalEggs >= maxEggs) {
+            // Show egg limit error in a form
+            FormWindowModal errorForm = new FormWindowModal(
+                TextFormat.RED + "Egg Limit Reached",
+                TextFormat.RED + "You have reached the maximum limit of " + maxEggs + " dragon eggs.",
+                TextFormat.AQUA + "Back to Main Menu",
+                TextFormat.RED + "Close"
+            );
+            player.showFormWindow(errorForm, FORM_PURCHASE_ERROR);
+            return;
+        }
+        
+        // Process purchase
+        if (EconomyAPI.getInstance().reduceMoney(player, price) == EconomyAPI.RET_SUCCESS) {
+            // Create the egg item for internal processing
+            Item eggItem = eggManager.createNewDragonEgg(player);
+            
+            // Get egg ID for storage
+            UUID eggUUID = eggManager.getDragonUUID(eggItem);
+            String eggId = (eggUUID != null) ? eggUUID.toString() : null;
+            
+            if (eggId == null) {
+                player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.purchaseFailed"));
+                return;
+            }
+            
+            // Store the egg directly to database
+            if (databaseManager.storeEgg(player.getName(), eggId)) {
+                // Show success message in a form
+                FormWindowModal resultForm = new FormWindowModal(
+                    TextFormat.GREEN + "Egg Purchased & Stored",
+                    TextFormat.GREEN + plugin.getLanguageString("messages.success.eggPurchased", price) + "\n\n" +
+                    TextFormat.YELLOW + plugin.getLanguageString("messages.success.eggStoredFull"),
+                    TextFormat.AQUA + "Back to Main Menu",
+                    TextFormat.RED + "Close"
+                );
+                player.showFormWindow(resultForm, FORM_PURCHASE_RESULT);
+            } else {
+                // Something went wrong with storage
+                player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.storeFailed"));
+                player.sendMessage(TextFormat.YELLOW + "The egg purchase was completed, but storage failed.");
+                // Add the egg to player's inventory as fallback
+                player.getInventory().addItem(eggItem);
+                openMainMenu(player);
+            }
+        } else {
+            // Show purchase failed error in a form
+            FormWindowModal errorForm = new FormWindowModal(
+                TextFormat.RED + "Purchase Failed",
+                TextFormat.RED + plugin.getLanguageString("messages.errors.purchaseFailed"),
+                TextFormat.AQUA + "Back to Main Menu",
+                TextFormat.RED + "Close"
+            );
+            player.showFormWindow(errorForm, FORM_PURCHASE_ERROR);
         }
     }
 } 

@@ -324,53 +324,99 @@ public class DragonShardManager {
     public boolean consumeShard(Player player, String dragonType) {
         if (player == null || dragonType == null) return false;
         
-        int shardId;
+        // Normalize the dragon type string to just get the element type
         String dragonTypeKey;
         
-        switch (dragonType) {
-            case "Fire Dragon":
-                shardId = FIRE_SHARD_ID;
-                dragonTypeKey = "fire";
-                break;
-            case "Ice Dragon":
-                shardId = ICE_SHARD_ID;
-                dragonTypeKey = "ice";
-                break;
-            case "Lightning Dragon":
-                shardId = LIGHTNING_SHARD_ID;
-                dragonTypeKey = "lightning";
-                break;
-            case "Water Dragon":
-                shardId = WATER_SHARD_ID;
-                dragonTypeKey = "water";
-                break;
-            case "Earth Dragon":
-                shardId = EARTH_SHARD_ID;
-                dragonTypeKey = "earth";
-                break;
-            default:
-                plugin.getLogger().warning("Unknown dragon type in consumeShard: " + dragonType);
-                return false; // Unknown dragon type
+        if (dragonType.contains("Fire")) {
+            dragonTypeKey = "fire";
+        } else if (dragonType.contains("Ice")) {
+            dragonTypeKey = "ice";
+        } else if (dragonType.contains("Lightning")) {
+            dragonTypeKey = "lightning";
+        } else if (dragonType.contains("Water")) {
+            dragonTypeKey = "water";
+        } else if (dragonType.contains("Earth")) {
+            dragonTypeKey = "earth";
+        } else {
+            plugin.getLogger().warning("Unknown dragon type in consumeShard: " + dragonType);
+            return false; // Unknown dragon type
         }
 
-        plugin.getLogger().info("Looking for " + dragonTypeKey + " shard with ID " + shardId + " for " + dragonType);
+        plugin.getLogger().info("[ShardManager] Looking for " + dragonTypeKey + " shard for dragon type: " + dragonType);
 
+        // First priority: Look for custom shard items with the right NBT data
         for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
             Item item = player.getInventory().getItem(slot);
-            // Check if item is the correct type and is a valid dragon shard
-            if (item != null && item.getId() == shardId && 
-                ItemDragonShard.isDragonShardOfType(item, dragonTypeKey)) {
+            
+            if (item != null && item.hasCompoundTag()) {
+                plugin.getLogger().debug("[ShardManager] Checking item in slot " + slot + ": " + item.getName() + " (ID: " + item.getId() + ")");
                 
-                if (item.getCount() > 1) {
-                    item.setCount(item.getCount() - 1);
-                    player.getInventory().setItem(slot, item);
-                } else {
-                    player.getInventory().setItem(slot, Item.get(Item.AIR));
+                // Check if it's a valid dragon shard of the right type using NBT data
+                if (ItemDragonShard.isDragonShardOfType(item, dragonTypeKey)) {
+                    plugin.getLogger().info("[ShardManager] Found custom " + dragonTypeKey + " shard in slot " + slot);
+                    
+                    if (item.getCount() > 1) {
+                        item.setCount(item.getCount() - 1);
+                        player.getInventory().setItem(slot, item);
+                    } else {
+                        player.getInventory().setItem(slot, Item.get(Item.AIR));
+                    }
+                    player.getInventory().sendContents(player); // Update client inventory
+                    return true;
                 }
-                player.getInventory().sendContents(player); // Update client inventory
-                return true;
             }
         }
-        return false;
+        
+        plugin.getLogger().info("[ShardManager] No custom shard found, falling back to vanilla items");
+        
+        // Second priority: Fall back to vanilla items for compatibility
+        int vanillaItemId;
+        switch (dragonTypeKey) {
+            case "fire":
+                vanillaItemId = FIRE_SHARD_ID;
+                break;
+            case "ice":
+                vanillaItemId = ICE_SHARD_ID;
+                break;
+            case "lightning":
+                vanillaItemId = LIGHTNING_SHARD_ID;
+                break;
+            case "water":
+                vanillaItemId = WATER_SHARD_ID;
+                break;
+            case "earth":
+                vanillaItemId = EARTH_SHARD_ID;
+                break;
+            default:
+                return false;
+        }
+        
+        plugin.getLogger().info("[ShardManager] Looking for vanilla item ID " + vanillaItemId + " for " + dragonTypeKey);
+        
+        // Look for vanilla items if no custom shard was found
+        for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
+            Item item = player.getInventory().getItem(slot);
+            
+            // Check if this is a vanilla item that matches what we need
+            if (item != null && item.getId() == vanillaItemId) {
+                // Only match vanilla items that don't have the dragon shard NBT tag
+                // (to avoid considering real shards as vanilla items)
+                if (!item.hasCompoundTag() || !item.getNamedTag().contains(ItemDragonShard.NBT_TAG)) {
+                    plugin.getLogger().info("[ShardManager] Found vanilla item in slot " + slot);
+                    
+                    if (item.getCount() > 1) {
+                        item.setCount(item.getCount() - 1);
+                        player.getInventory().setItem(slot, item);
+                    } else {
+                        player.getInventory().setItem(slot, Item.get(Item.AIR));
+                    }
+                    player.getInventory().sendContents(player); // Update client inventory
+                    return true;
+                }
+            }
+        }
+        
+        plugin.getLogger().info("[ShardManager] No matching shard or vanilla item found for " + dragonType);
+        return false; // No matching items found
     }
 }

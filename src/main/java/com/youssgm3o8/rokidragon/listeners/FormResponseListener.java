@@ -27,6 +27,10 @@ public class FormResponseListener implements Listener {
         
         // Skip if player closed the form
         if (event.wasClosed()) {
+            if (formId == FormBasedDragonGUI.FORM_FIRST_NAMING) {
+                plugin.getLogger().info("[Form Debug] Player " + player.getName() + " closed the naming form without responding");
+                player.sendMessage("§eYou need to name your dragon before summoning it. Try using summoning it again.");
+            }
             return;
         }
         
@@ -38,6 +42,12 @@ public class FormResponseListener implements Listener {
         }
         
         try {
+            // For debugging naming form issues
+            if (formId == FormBasedDragonGUI.FORM_FIRST_NAMING) {
+                plugin.getLogger().info("[Form Debug] Processing naming form response from " + player.getName() + 
+                                      ". Window type: " + event.getWindow().getClass().getSimpleName());
+            }
+            
             // Determine form type and process
             if (event.getWindow() instanceof FormWindowSimple) {
                 FormWindowSimple window = (FormWindowSimple) event.getWindow();
@@ -53,6 +63,10 @@ public class FormResponseListener implements Listener {
             }
         } catch (Exception e) {
             plugin.getLogger().error("Error handling form response: " + e.getMessage(), e);
+            if (formId == FormBasedDragonGUI.FORM_FIRST_NAMING) {
+                plugin.getLogger().error("[Form Debug] Error in naming form for " + player.getName() + ": " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
     

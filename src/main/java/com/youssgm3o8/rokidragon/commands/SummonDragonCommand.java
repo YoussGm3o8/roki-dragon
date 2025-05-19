@@ -192,6 +192,17 @@ public class SummonDragonCommand extends Command {
         String dragonType = databaseManager.getDragonType(eggId);
         String dragonName = databaseManager.getDragonName(eggId);
         
+        // Check if dragon needs to be named (if name is null, empty, or the default "Dragon")
+        boolean needsNaming = dragonName == null || dragonName.trim().isEmpty() || "Dragon".equals(dragonName.trim());
+        plugin.getLogger().info("[Summon Check] EggId: " + eggId + ", Existing Name: '" + dragonName + "', Needs Naming: " + needsNaming);
+        
+        if (needsNaming) {
+            // Dragon hasn't been named yet, open the naming form
+            dragonGUI.openFirstNamingForm(player, eggId);
+            plugin.getLogger().info("Opening first naming form for egg " + eggId);
+            return true;
+        }
+        
         // Summon the specific dragon using the egg ID
         com.youssgm3o8.rokidragon.dragon.DragonEntity dragon = dragonManager.spawnDragon(
             dragonType,
@@ -209,6 +220,8 @@ public class SummonDragonCommand extends Command {
             // Set cooldown using the main plugin's method
             int summonCooldown = plugin.getConfig().getInt("timing.cooldowns.summon_seconds", 30);
             plugin.setCooldown(player.getName(), summonCooldown);
+            
+            // DragonManager will handle the success message
         } else {
             plugin.getLogger().warning("Failed to summon dragon for " + player.getName());
             player.sendMessage(TextFormat.RED + plugin.getLanguageString("messages.errors.summonFailed"));

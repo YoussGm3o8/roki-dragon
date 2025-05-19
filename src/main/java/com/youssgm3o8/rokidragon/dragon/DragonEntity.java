@@ -34,6 +34,7 @@ import com.youssgm3o8.rokidragon.entities.EntityLightningBall;
 import com.youssgm3o8.rokidragon.entities.EntityWaterBall;
 import com.youssgm3o8.rokidragon.entities.EntityEarthBall;
 import com.youssgm3o8.rokidragon.manager.DragonShardManager; // Ensure this is the correct import
+import cn.nukkit.entity.data.StringEntityData;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -155,6 +156,8 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     // Flight speed constants
     private static final float MAX_SPEED = 0.92f;
 
+    private boolean isHandlingDeath = false; // Flag to prevent double death handling
+
     /**
      * Sets the static default stats for all DragonEntity instances, typically loaded from config.
      * @param maxHealth Default maximum health.
@@ -230,7 +233,7 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         this.setDataProperty(new FloatEntityData(DATA_BOUNDING_BOX_HEIGHT, this.getHeight()));
         
         this.setSaddled(true);
-
+        
         // Load customization from NBT if exists
         if (this.namedTag.contains(NBT_KEY_DRAGON_TYPE)) {
             this.dragonType = this.namedTag.getString(NBT_KEY_DRAGON_TYPE);
@@ -248,7 +251,22 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         if (this.namedTag.contains(NBT_KEY_DRAGON_COLOR)) {
             this.dragonColor = this.namedTag.getString(NBT_KEY_DRAGON_COLOR);
         }
-
+        
+        // Set dragon name with color based on type
+        if (this.namedTag.contains("DragonName")) {
+            String dragonName = this.namedTag.getString("DragonName");
+            if (dragonName != null && !dragonName.isEmpty()) {
+                // Apply color based on dragon type
+                String colorCode = com.youssgm3o8.rokidragon.util.DragonUtils.getColorByType(this.dragonType);
+                this.setNameTag(colorCode + dragonName);
+                
+                // Log the name setting
+                if (plugin != null) {
+                    plugin.getLogger().info("[DragonEntity Init] Setting name tag to: " + colorCode + dragonName);
+                }
+            }
+        }
+        
         // Make dragon damageable
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_NO_AI, false);
         
@@ -808,7 +826,15 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
      */
     @Override
     public String getName() {
-        return this.hasCustomName() ? this.getNameTag() : "Dragon";
+        String name = this.hasCustomName() ? this.getNameTag() : "Dragon";
+        
+        // Apply color based on dragon type if not already colored
+        if (!name.contains("§") && this.dragonType != null) {
+            String colorCode = com.youssgm3o8.rokidragon.util.DragonUtils.getColorByType(this.dragonType);
+            name = colorCode + name;
+        }
+        
+        return name;
     }
 
     /**
@@ -910,6 +936,13 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
     }
 
     private void handleDeath() {
+        // Prevent duplicate death handling
+        if (isHandlingDeath) {
+            plugin.getLogger().info("Skipping duplicate death handling for dragon " + this.getName());
+            return;
+        }
+        isHandlingDeath = true;
+        
         plugin.getLogger().info("Dragon " + this.getName() + " owned by " + (owner != null ? owner.getName() : "N/A") + " is dying.");
 
         // Get information about what killed the dragon
@@ -1089,21 +1122,21 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         long currentTime = System.currentTimeMillis(); // Get current time once
         long timeSinceLastShot = currentTime - lastFireballTime;
 
-        // --- DEBUG LOGGING ---
-        plugin.getLogger().info("Shoot attempt: currentTime=" + currentTime + 
-                               ", lastFireballTime=" + lastFireballTime + 
-                               ", timeSinceLastShot=" + timeSinceLastShot + 
-                               ", cooldownMillis=" + cooldownMillis);
-        // --- END DEBUG LOGGING ---
+        if (plugin != null) {
+            plugin.getLogger().debug("[Dragon Shoot] Attempt: timeSinceLastShot=" + timeSinceLastShot + 
+                                 ", cooldownMillis=" + cooldownMillis + ", dragonType=" + this.dragonType);
+        }
 
         if (timeSinceLastShot < cooldownMillis) {
-            plugin.getLogger().info("Shoot blocked: Cooldown active."); // Debug log
+            if (plugin != null) {
+                plugin.getLogger().debug("[Dragon Shoot] Blocked: Cooldown active for " + this.dragonType);
+            }
             
             // Play note sound to the rider as feedback
             if (!this.passengers.isEmpty() && this.passengers.get(0) instanceof Player) {
                 Player rider = (Player) this.passengers.get(0);
                 // Play a low bass note sound
-                rider.getLevel().addLevelSoundEvent(rider, LevelSoundEventPacket.SOUND_NOTE, 0); // Data 0 for bass
+                rider.getLevel().addLevelSoundEvent(rider, LevelSoundEventPacket.SOUND_NOTE, 0);
             }
             
             return; // Still on cooldown
@@ -1115,6 +1148,15 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         }
         Player rider = (Player) this.passengers.get(0);
 
+        // Check if dragon type is valid
+        if (this.dragonType == null || this.dragonType.isEmpty()) {
+            if (plugin != null) {
+                plugin.getLogger().warning("[Dragon Shoot] Invalid dragon type: " + this.dragonType);
+            }
+            rider.sendMessage(TextFormat.RED + "Error: Cannot determine dragon type for ability.");
+            return;
+        }
+
         // Get required item and shoot action based on dragon type
         Item requiredItem;
         Runnable shootAction;
@@ -1122,34 +1164,36 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
         
         switch (this.dragonType) {
             case "Fire Dragon":
-                requiredItem = Item.get(Item.FIRE_CHARGE); 
+                requiredItem = Item.get(DragonShardManager.FIRE_SHARD_ID); 
                 shootAction = this::shootFireball;
-                missingItemMessageKey = "messages.errors.missingShootItem";
+                missingItemMessageKey = "messages.errors.missingFireShard";
                 break;
             case "Ice Dragon":
-                requiredItem = Item.get(Item.SNOWBALL); // Default item
+                requiredItem = Item.get(DragonShardManager.ICE_SHARD_ID);
                 shootAction = this::shootIceball;
-                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                missingItemMessageKey = "messages.errors.missingIceShard";
                 break;
             case "Lightning Dragon":
-                requiredItem = Item.get(Item.GLOWSTONE_DUST); // Default item
+                requiredItem = Item.get(DragonShardManager.LIGHTNING_SHARD_ID);
                 shootAction = this::shootLightningBall;
-                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                missingItemMessageKey = "messages.errors.missingLightningShard";
                 break;
             case "Water Dragon":
-                requiredItem = Item.get(Item.PRISMARINE_CRYSTALS); // Water-themed item
+                requiredItem = Item.get(DragonShardManager.WATER_SHARD_ID);
                 shootAction = this::shootWaterball;
-                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                missingItemMessageKey = "messages.errors.missingWaterShard";
                 break;
             case "Earth Dragon":
-                requiredItem = Item.get(Item.CLAY_BALL); // Earth-themed item
+                requiredItem = Item.get(DragonShardManager.EARTH_SHARD_ID);
                 shootAction = this::shootEarthball;
-                missingItemMessageKey = "messages.errors.missingShootItem"; // Use generic message
+                missingItemMessageKey = "messages.errors.missingEarthShard";
                 break;
             default:
-                 plugin.getLogger().warning("Attempted to shoot with unknown dragon type: " + this.dragonType);
+                 if (plugin != null) {
+                     plugin.getLogger().warning("[Dragon Shoot] Unknown dragon type: " + this.dragonType);
+                 }
                  // Default to fire dragon behavior for safety
-                 requiredItem = Item.get(Item.FIRE_CHARGE);
+                 requiredItem = Item.get(DragonShardManager.FIRE_SHARD_ID);
                  shootAction = this::shootFireball;
                  missingItemMessageKey = "messages.errors.missingShootItem";
                  break;
@@ -1157,38 +1201,63 @@ public class DragonEntity extends HorseBase implements CustomEntity, EntityInter
 
         // Check if the shardManager is available
         if (shardManager == null) {
-            plugin.getLogger().warning("ShardManager is null, using fallback consumeRequiredItem method");
+            if (plugin != null) {
+                plugin.getLogger().warning("[Dragon Shoot] ShardManager is null, using fallback consumeRequiredItem method");
+            }
             
             // Fallback to old method if shardManager is not available
             if (consumeRequiredItem(rider, requiredItem.getId())) {
-                plugin.getLogger().info("Item consumed. Updating lastFireballTime and shooting."); // Debug log
+                if (plugin != null) {
+                    plugin.getLogger().info("[Dragon Shoot] Item consumed using fallback method. Shooting " + this.dragonType + " ability");
+                }
                 lastFireballTime = currentTime;
                 shootAction.run();
             } else {
-                rider.sendMessage(TextFormat.RED + plugin.getLanguageString(missingItemMessageKey, requiredItem.getName()));
+                String itemName = requiredItem.getName();
+                if (plugin != null && plugin.getLanguageString(missingItemMessageKey) != null) {
+                    rider.sendMessage(TextFormat.RED + plugin.getLanguageString(missingItemMessageKey));
+                } else {
+                    rider.sendMessage(TextFormat.RED + "You need " + itemName + " to use your dragon's ability!");
+                }
             }
             return;
         }
         
         // Use the shardManager to consume a proper shard
         if (shardManager.consumeShard(rider, this.dragonType)) {
-            plugin.getLogger().info("Shard consumed. Updating lastFireballTime and shooting."); // Debug log
+            if (plugin != null) {
+                plugin.getLogger().info("[Dragon Shoot] Shard consumed successfully. Shooting " + this.dragonType + " ability");
+            }
             // Update cooldown time *before* shooting
             lastFireballTime = currentTime;
             // Execute the appropriate shoot method
             shootAction.run();
-        } else {
-            // First try the basic item (for backward compatibility)
-            if (consumeRequiredItem(rider, requiredItem.getId())) {
-                plugin.getLogger().info("Basic item consumed. Updating lastFireballTime and shooting."); // Debug log
-                lastFireballTime = currentTime;
-                shootAction.run();
-            } else {
-                plugin.getLogger().info("Shoot failed: Required item not found."); // Debug log
-                // Send message if item not found (using the specific item name)
-                rider.sendMessage(TextFormat.RED + plugin.getLanguageString(missingItemMessageKey, requiredItem.getName()));
+            return;
+        } 
+        
+        // If we get here, the shard manager couldn't find a shard
+        // Try the basic item as fallback (for backward compatibility)
+        if (consumeRequiredItem(rider, requiredItem.getId())) {
+            if (plugin != null) {
+                plugin.getLogger().info("[Dragon Shoot] Basic item consumed as fallback. Shooting " + this.dragonType + " ability");
             }
+            lastFireballTime = currentTime;
+            shootAction.run();
+            return;
         }
+        
+        // If we get here, no shards or compatible items were found
+        if (plugin != null) {
+            plugin.getLogger().info("[Dragon Shoot] Failed: No compatible items found for " + this.dragonType);
+        }
+        // Get the appropriate message from language file
+        String message;
+        if (plugin != null && plugin.getLanguageString(missingItemMessageKey) != null) {
+            message = plugin.getLanguageString(missingItemMessageKey);
+        } else {
+            message = "You need " + requiredItem.getName() + " to use your dragon's ability!";
+        }
+        rider.sendMessage(TextFormat.RED + message);
     }
 
     /**
